@@ -99,7 +99,6 @@ ENV PROVIDER="openrouter"
 ENV ZEROCLAW_GATEWAY_PORT=3000
 
 WORKDIR /zeroclaw-data
-USER 65534:65534
 EXPOSE 3000
 ENTRYPOINT ["zeroclaw"]
 CMD ["daemon"]
