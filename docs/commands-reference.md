@@ -2,7 +2,7 @@
 
 This reference is derived from the current CLI surface (`zeroclaw --help`).
 
-Last verified: **February 18, 2026**.
+Last verified: **February 19, 2026**.
 
 ## Top-Level Commands
 
@@ -22,6 +22,7 @@ Last verified: **February 18, 2026**.
 | `integrations` | Inspect integration details |
 | `skills` | List/install/remove skills |
 | `migrate` | Import from external runtimes (currently OpenClaw) |
+| `config` | Export machine-readable config schema |
 | `hardware` | Discover and introspect USB hardware |
 | `peripheral` | Configure and flash peripherals |
 
@@ -51,6 +52,7 @@ Last verified: **February 18, 2026**.
 - `zeroclaw service install`
 - `zeroclaw service start`
 - `zeroclaw service stop`
+- `zeroclaw service restart`
 - `zeroclaw service status`
 - `zeroclaw service uninstall`
 
@@ -89,6 +91,13 @@ Runtime in-chat commands (Telegram/Discord while channel server is running):
 - `/model`
 - `/model <model-id>`
 
+Channel runtime also watches `config.toml` and hot-applies updates to:
+- `default_provider`
+- `default_model`
+- `default_temperature`
+- `api_key` / `api_url` (for the default provider)
+- `reliability.*` provider retry settings
+
 `add/remove` currently route you back to managed setup/manual config paths (not full declarative mutators yet).
 
 ### `integrations`
@@ -101,9 +110,19 @@ Runtime in-chat commands (Telegram/Discord while channel server is running):
 - `zeroclaw skills install <source>`
 - `zeroclaw skills remove <name>`
 
+`<source>` accepts git remotes (`https://...`, `http://...`, `ssh://...`, and `git@host:owner/repo.git`) or a local filesystem path.
+
+Skill manifests (`SKILL.toml`) support `prompts` and `[[tools]]`; both are injected into the agent system prompt at runtime, so the model can follow skill instructions without manually reading skill files.
+
 ### `migrate`
 
 - `zeroclaw migrate openclaw [--source <path>] [--dry-run]`
+
+### `config`
+
+- `zeroclaw config schema`
+
+`config schema` prints a JSON Schema (draft 2020-12) for the full `config.toml` contract to stdout.
 
 ### `hardware`
 

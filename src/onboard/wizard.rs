@@ -12,7 +12,8 @@ use crate::memory::{
 };
 use crate::providers::{
     canonical_china_provider_name, is_glm_alias, is_glm_cn_alias, is_minimax_alias,
-    is_moonshot_alias, is_qianfan_alias, is_qwen_alias, is_zai_alias, is_zai_cn_alias,
+    is_moonshot_alias, is_qianfan_alias, is_qwen_alias, is_qwen_oauth_alias, is_zai_alias,
+    is_zai_cn_alias,
 };
 use anyhow::{bail, Context, Result};
 use console::style;
@@ -92,12 +93,13 @@ fn has_launchable_channels(channels: &ChannelsConfig) -> bool {
         || irc.is_some()
         || lark.is_some()
         || dingtalk.is_some()
+        || linq.is_some()
         || qq.is_some()
 }
 
 // ── Main wizard entry point ──────────────────────────────────────
 
-pub fn run_wizard() -> Result<Config> {
+pub async fn run_wizard() -> Result<Config> {
     println!("{}", style(BANNER).cyan().bold());
 
     println!(
@@ -160,6 +162,7 @@ pub fn run_wizard() -> Result<Config> {
         scheduler: crate::config::schema::SchedulerConfig::default(),
         agent: crate::config::schema::AgentConfig::default(),
         model_routes: Vec::new(),
+        embedding_routes: Vec::new(),
         heartbeat: HeartbeatConfig::default(),
         cron: crate::config::CronConfig::default(),
         channels_config,
@@ -171,6 +174,7 @@ pub fn run_wizard() -> Result<Config> {
         secrets: secrets_config,
         browser: BrowserConfig::default(),
         http_request: crate::config::HttpRequestConfig::default(),
+        multimodal: crate::config::MultimodalConfig::default(),
         web_search: crate::config::WebSearchConfig::default(),
         proxy: crate::config::ProxyConfig::default(),
         identity: crate::config::IdentityConfig::default(),
@@ -193,8 +197,8 @@ pub fn run_wizard() -> Result<Config> {
         if config.memory.auto_save { "on" } else { "off" }
     );
 
-    config.save()?;
-    persist_workspace_selection(&config.config_path)?;
+    config.save().await?;
+    persist_workspace_selection(&config.config_path).await?;
 
     // ── Final summary ────────────────────────────────────────────
     print_summary(&config);
@@ -228,7 +232,7 @@ pub fn run_wizard() -> Result<Config> {
 }
 
 /// Interactive repair flow: rerun channel setup only without redoing full onboarding.
-pub fn run_channels_repair_wizard() -> Result<Config> {
+pub async fn run_channels_repair_wizard() -> Result<Config> {
     println!("{}", style(BANNER).cyan().bold());
     println!(
         "  {}",
@@ -238,12 +242,12 @@ pub fn run_channels_repair_wizard() -> Result<Config> {
     );
     println!();
 
-    let mut config = Config::load_or_init()?;
+    let mut config = Config::load_or_init().await?;
 
     print_step(1, 1, "Channels (How You Talk to ZeroClaw)");
     config.channels_config = setup_channels()?;
-    config.save()?;
-    persist_workspace_selection(&config.config_path)?;
+    config.save().await?;
+    persist_workspace_selection(&config.config_path).await?;
 
     println!();
     println!(
@@ -323,9 +327,10 @@ fn memory_config_defaults_for_backend(backend: &str) -> MemoryConfig {
 }
 
 #[allow(clippy::too_many_lines)]
-pub fn run_quick_setup(
+pub async fn run_quick_setup(
     credential_override: Option<&str>,
     provider: Option<&str>,
+    model_override: Option<&str>,
     memory_backend: Option<&str>,
 ) -> Result<Config> {
     println!("{}", style(BANNER).cyan().bold());
@@ -347,7 +352,9 @@ pub fn run_quick_setup(
     fs::create_dir_all(&workspace_dir).context("Failed to create workspace directory")?;
 
     let provider_name = provider.unwrap_or("openrouter").to_string();
-    let model = default_model_for_provider(&provider_name);
+    let model = model_override
+        .map(str::to_string)
+        .unwrap_or_else(|| default_model_for_provider(&provider_name));
     let memory_backend_name = memory_backend
         .unwrap_or(default_memory_backend_key())
         .to_string();
@@ -374,6 +381,7 @@ pub fn run_quick_setup(
         scheduler: crate::config::schema::SchedulerConfig::default(),
         agent: crate::config::schema::AgentConfig::default(),
         model_routes: Vec::new(),
+        embedding_routes: Vec::new(),
         heartbeat: HeartbeatConfig::default(),
         cron: crate::config::CronConfig::default(),
         channels_config: ChannelsConfig::default(),
@@ -385,6 +393,7 @@ pub fn run_quick_setup(
         secrets: SecretsConfig::default(),
         browser: BrowserConfig::default(),
         http_request: crate::config::HttpRequestConfig::default(),
+        multimodal: crate::config::MultimodalConfig::default(),
         web_search: crate::config::WebSearchConfig::default(),
         proxy: crate::config::ProxyConfig::default(),
         identity: crate::config::IdentityConfig::default(),
@@ -395,8 +404,8 @@ pub fn run_quick_setup(
         query_classification: crate::config::QueryClassificationConfig::default(),
     };
 
-    config.save()?;
-    persist_workspace_selection(&config.config_path)?;
+    config.save().await?;
+    persist_workspace_selection(&config.config_path).await?;
 
     // Scaffold minimal workspace files
     let default_ctx = ProjectContext {
@@ -492,6 +501,10 @@ pub fn run_quick_setup(
 }
 
 fn canonical_provider_name(provider_name: &str) -> &str {
+    if is_qwen_oauth_alias(provider_name) {
+        return "qwen-code";
+    }
+
     if let Some(canonical) = canonical_china_provider_name(provider_name) {
         return canonical;
     }
@@ -502,6 +515,7 @@ fn canonical_provider_name(provider_name: &str) -> &str {
         "google" | "google-gemini" => "gemini",
         "kimi_coding" | "kimi_for_coding" => "kimi-code",
         "nvidia-nim" | "build.nvidia.com" => "nvidia",
+        "aws-bedrock" => "bedrock",
         _ => provider_name,
     }
 }
@@ -541,9 +555,11 @@ fn default_model_for_provider(provider: &str) -> String {
         "glm" | "zai" => "glm-5".into(),
         "minimax" => "MiniMax-M2.5".into(),
         "qwen" => "qwen-plus".into(),
+        "qwen-code" => "qwen3-coder-plus".into(),
         "ollama" => "llama3.2".into(),
         "gemini" => "gemini-2.5-pro".into(),
         "kimi-code" => "kimi-for-coding".into(),
+        "bedrock" => "anthropic.claude-sonnet-4-5-20250929-v1:0".into(),
         "nvidia" => "meta/llama-3.3-70b-instruct".into(),
         "astrai" => "anthropic/claude-sonnet-4.6".into(),
         _ => "anthropic/claude-sonnet-4.6".into(),
@@ -816,6 +832,20 @@ fn curated_models_for_provider(provider_name: &str) -> Vec<(String, String)> {
                 "Qwen Turbo (fast and cost-efficient)".to_string(),
             ),
         ],
+        "qwen-code" => vec![
+            (
+                "qwen3-coder-plus".to_string(),
+                "Qwen3 Coder Plus (recommended for coding workflows)".to_string(),
+            ),
+            (
+                "qwen3.5-plus".to_string(),
+                "Qwen3.5 Plus (reasoning + coding)".to_string(),
+            ),
+            (
+                "qwen3-max-2026-01-23".to_string(),
+                "Qwen3 Max (high-capability coding model)".to_string(),
+            ),
+        ],
         "nvidia" => vec![
             (
                 "meta/llama-3.3-70b-instruct".to_string(),
@@ -860,6 +890,24 @@ fn curated_models_for_provider(provider_name: &str) -> Vec<(String, String)> {
             ("mistral".to_string(), "Mistral 7B".to_string()),
             ("codellama".to_string(), "Code Llama".to_string()),
             ("phi3".to_string(), "Phi-3 (small, fast)".to_string()),
+        ],
+        "bedrock" => vec![
+            (
+                "anthropic.claude-sonnet-4-6".to_string(),
+                "Claude Sonnet 4.6 (latest, recommended)".to_string(),
+            ),
+            (
+                "anthropic.claude-opus-4-6-v1".to_string(),
+                "Claude Opus 4.6 (strongest)".to_string(),
+            ),
+            (
+                "anthropic.claude-haiku-4-5-20251001-v1:0".to_string(),
+                "Claude Haiku 4.5 (fastest, cheapest)".to_string(),
+            ),
+            (
+                "anthropic.claude-sonnet-4-5-20250929-v1:0".to_string(),
+                "Claude Sonnet 4.5".to_string(),
+            ),
         ],
         "gemini" => vec![
             (
@@ -1458,16 +1506,18 @@ fn print_bullet(text: &str) {
     println!("  {} {}", style("›").cyan(), text);
 }
 
-fn persist_workspace_selection(config_path: &Path) -> Result<()> {
+async fn persist_workspace_selection(config_path: &Path) -> Result<()> {
     let config_dir = config_path
         .parent()
         .context("Config path must have a parent directory")?;
-    crate::config::schema::persist_active_workspace_config_dir(config_dir).with_context(|| {
-        format!(
-            "Failed to persist active workspace selection for {}",
-            config_dir.display()
-        )
-    })
+    crate::config::schema::persist_active_workspace_config_dir(config_dir)
+        .await
+        .with_context(|| {
+            format!(
+                "Failed to persist active workspace selection for {}",
+                config_dir.display()
+            )
+        })
 }
 
 // ── Step 1: Workspace ────────────────────────────────────────────
@@ -1573,6 +1623,10 @@ fn setup_provider(workspace_dir: &Path) -> Result<(String, String, String, Optio
             (
                 "kimi-code",
                 "Kimi Code — coding-optimized Kimi API (KimiCLI)",
+            ),
+            (
+                "qwen-code",
+                "Qwen Code — OAuth tokens reused from ~/.qwen/oauth_creds.json",
             ),
             ("moonshot", "Moonshot — Kimi API (China endpoint)"),
             (
@@ -1782,11 +1836,48 @@ fn setup_provider(workspace_dir: &Path) -> Result<(String, String, String, Optio
 
             key
         }
+    } else if canonical_provider_name(provider_name) == "qwen-code" {
+        if std::env::var("QWEN_OAUTH_TOKEN").is_ok() {
+            print_bullet(&format!(
+                "{} QWEN_OAUTH_TOKEN environment variable detected!",
+                style("✓").green().bold()
+            ));
+            "qwen-oauth".to_string()
+        } else {
+            print_bullet(
+                "Qwen Code OAuth credentials are usually stored in ~/.qwen/oauth_creds.json.",
+            );
+            print_bullet(
+                "Run `qwen` once and complete OAuth login to populate cached credentials.",
+            );
+            print_bullet("You can also set QWEN_OAUTH_TOKEN directly.");
+            println!();
+
+            let key: String = Input::new()
+                .with_prompt(
+                    "  Paste your Qwen OAuth token (or press Enter to auto-detect cached OAuth)",
+                )
+                .allow_empty(true)
+                .interact_text()?;
+
+            if key.trim().is_empty() {
+                print_bullet(&format!(
+                    "Using OAuth auto-detection. Set {} and optional {} if needed.",
+                    style("QWEN_OAUTH_TOKEN").yellow(),
+                    style("QWEN_OAUTH_RESOURCE_URL").yellow()
+                ));
+                "qwen-oauth".to_string()
+            } else {
+                key
+            }
+        }
     } else {
         let key_url = if is_moonshot_alias(provider_name)
             || canonical_provider_name(provider_name) == "kimi-code"
         {
             "https://platform.moonshot.cn/console/api-keys"
+        } else if canonical_provider_name(provider_name) == "qwen-code" {
+            "https://qwen.readthedocs.io/en/latest/getting_started/installation.html"
         } else if is_glm_cn_alias(provider_name) || is_zai_cn_alias(provider_name) {
             "https://open.bigmodel.cn/usercenter/proj-mgmt/apikeys"
         } else if is_glm_alias(provider_name) || is_zai_alias(provider_name) {
@@ -1821,29 +1912,51 @@ fn setup_provider(workspace_dir: &Path) -> Result<(String, String, String, Optio
         };
 
         println!();
-        if !key_url.is_empty() {
+        if matches!(provider_name, "bedrock" | "aws-bedrock") {
+            // Bedrock uses AWS AKSK, not a single API key.
+            print_bullet("Bedrock uses AWS credentials (not a single API key).");
             print_bullet(&format!(
-                "Get your API key at: {}",
-                style(key_url).cyan().underlined()
+                "Set {} and {} environment variables.",
+                style("AWS_ACCESS_KEY_ID").yellow(),
+                style("AWS_SECRET_ACCESS_KEY").yellow(),
             ));
-        }
-        print_bullet("You can also set it later via env var or config file.");
-        println!();
-
-        let key: String = Input::new()
-            .with_prompt("  Paste your API key (or press Enter to skip)")
-            .allow_empty(true)
-            .interact_text()?;
-
-        if key.is_empty() {
-            let env_var = provider_env_var(provider_name);
             print_bullet(&format!(
-                "Skipped. Set {} or edit config.toml later.",
-                style(env_var).yellow()
+                "Optionally set {} for the region (default: us-east-1).",
+                style("AWS_REGION").yellow(),
             ));
-        }
+            if !key_url.is_empty() {
+                print_bullet(&format!(
+                    "Manage IAM credentials at: {}",
+                    style(key_url).cyan().underlined()
+                ));
+            }
+            println!();
+            String::new()
+        } else {
+            if !key_url.is_empty() {
+                print_bullet(&format!(
+                    "Get your API key at: {}",
+                    style(key_url).cyan().underlined()
+                ));
+            }
+            print_bullet("You can also set it later via env var or config file.");
+            println!();
 
-        key
+            let key: String = Input::new()
+                .with_prompt("  Paste your API key (or press Enter to skip)")
+                .allow_empty(true)
+                .interact_text()?;
+
+            if key.is_empty() {
+                let env_var = provider_env_var(provider_name);
+                print_bullet(&format!(
+                    "Skipped. Set {} or edit config.toml later.",
+                    style(env_var).yellow()
+                ));
+            }
+
+            key
+        }
     };
 
     // ── Model selection ──
@@ -2017,6 +2130,10 @@ fn setup_provider(workspace_dir: &Path) -> Result<(String, String, String, Optio
 
 /// Map provider name to its conventional env var
 fn provider_env_var(name: &str) -> &'static str {
+    if canonical_provider_name(name) == "qwen-code" {
+        return "QWEN_OAUTH_TOKEN";
+    }
+
     match canonical_provider_name(name) {
         "openrouter" => "OPENROUTER_API_KEY",
         "anthropic" => "ANTHROPIC_API_KEY",
@@ -2474,116 +2591,155 @@ fn setup_channels() -> Result<ChannelsConfig> {
     println!();
 
     let mut config = ChannelsConfig::default();
+    #[derive(Clone, Copy)]
+    enum ChannelMenuChoice {
+        Telegram,
+        Discord,
+        Slack,
+        IMessage,
+        Matrix,
+        WhatsApp,
+        Linq,
+        Irc,
+        Webhook,
+        DingTalk,
+        QqOfficial,
+        LarkFeishu,
+        Done,
+    }
+    let menu_choices = [
+        ChannelMenuChoice::Telegram,
+        ChannelMenuChoice::Discord,
+        ChannelMenuChoice::Slack,
+        ChannelMenuChoice::IMessage,
+        ChannelMenuChoice::Matrix,
+        ChannelMenuChoice::WhatsApp,
+        ChannelMenuChoice::Linq,
+        ChannelMenuChoice::Irc,
+        ChannelMenuChoice::Webhook,
+        ChannelMenuChoice::DingTalk,
+        ChannelMenuChoice::QqOfficial,
+        ChannelMenuChoice::LarkFeishu,
+        ChannelMenuChoice::Done,
+    ];
 
     loop {
-        let options = vec![
-            format!(
-                "Telegram   {}",
-                if config.telegram.is_some() {
-                    "✅ connected"
-                } else {
-                    "— connect your bot"
-                }
-            ),
-            format!(
-                "Discord    {}",
-                if config.discord.is_some() {
-                    "✅ connected"
-                } else {
-                    "— connect your bot"
-                }
-            ),
-            format!(
-                "Slack      {}",
-                if config.slack.is_some() {
-                    "✅ connected"
-                } else {
-                    "— connect your bot"
-                }
-            ),
-            format!(
-                "iMessage   {}",
-                if config.imessage.is_some() {
-                    "✅ configured"
-                } else {
-                    "— macOS only"
-                }
-            ),
-            format!(
-                "Matrix     {}",
-                if config.matrix.is_some() {
-                    "✅ connected"
-                } else {
-                    "— self-hosted chat"
-                }
-            ),
-            format!(
-                "WhatsApp   {}",
-                if config.whatsapp.is_some() {
-                    "✅ connected"
-                } else {
-                    "— Business Cloud API"
-                }
-            ),
-            format!(
-                "Linq       {}",
-                if config.linq.is_some() {
-                    "✅ connected"
-                } else {
-                    "— iMessage/RCS/SMS via Linq API"
-                }
-            ),
-            format!(
-                "IRC        {}",
-                if config.irc.is_some() {
-                    "✅ configured"
-                } else {
-                    "— IRC over TLS"
-                }
-            ),
-            format!(
-                "Webhook    {}",
-                if config.webhook.is_some() {
-                    "✅ configured"
-                } else {
-                    "— HTTP endpoint"
-                }
-            ),
-            format!(
-                "DingTalk   {}",
-                if config.dingtalk.is_some() {
-                    "✅ connected"
-                } else {
-                    "— DingTalk Stream Mode"
-                }
-            ),
-            format!(
-                "QQ Official {}",
-                if config.qq.is_some() {
-                    "✅ connected"
-                } else {
-                    "— Tencent QQ Bot"
-                }
-            ),
-            format!(
-                "Lark/Feishu {}",
-                if config.lark.is_some() {
-                    "✅ connected"
-                } else {
-                    "— Lark/Feishu Bot"
-                }
-            ),
-            "Done — finish setup".to_string(),
-        ];
+        let options: Vec<String> = menu_choices
+            .iter()
+            .map(|choice| match choice {
+                ChannelMenuChoice::Telegram => format!(
+                    "Telegram   {}",
+                    if config.telegram.is_some() {
+                        "✅ connected"
+                    } else {
+                        "— connect your bot"
+                    }
+                ),
+                ChannelMenuChoice::Discord => format!(
+                    "Discord    {}",
+                    if config.discord.is_some() {
+                        "✅ connected"
+                    } else {
+                        "— connect your bot"
+                    }
+                ),
+                ChannelMenuChoice::Slack => format!(
+                    "Slack      {}",
+                    if config.slack.is_some() {
+                        "✅ connected"
+                    } else {
+                        "— connect your bot"
+                    }
+                ),
+                ChannelMenuChoice::IMessage => format!(
+                    "iMessage   {}",
+                    if config.imessage.is_some() {
+                        "✅ configured"
+                    } else {
+                        "— macOS only"
+                    }
+                ),
+                ChannelMenuChoice::Matrix => format!(
+                    "Matrix     {}",
+                    if config.matrix.is_some() {
+                        "✅ connected"
+                    } else {
+                        "— self-hosted chat"
+                    }
+                ),
+                ChannelMenuChoice::WhatsApp => format!(
+                    "WhatsApp   {}",
+                    if config.whatsapp.is_some() {
+                        "✅ connected"
+                    } else {
+                        "— Business Cloud API"
+                    }
+                ),
+                ChannelMenuChoice::Linq => format!(
+                    "Linq       {}",
+                    if config.linq.is_some() {
+                        "✅ connected"
+                    } else {
+                        "— iMessage/RCS/SMS via Linq API"
+                    }
+                ),
+                ChannelMenuChoice::Irc => format!(
+                    "IRC        {}",
+                    if config.irc.is_some() {
+                        "✅ configured"
+                    } else {
+                        "— IRC over TLS"
+                    }
+                ),
+                ChannelMenuChoice::Webhook => format!(
+                    "Webhook    {}",
+                    if config.webhook.is_some() {
+                        "✅ configured"
+                    } else {
+                        "— HTTP endpoint"
+                    }
+                ),
+                ChannelMenuChoice::DingTalk => format!(
+                    "DingTalk   {}",
+                    if config.dingtalk.is_some() {
+                        "✅ connected"
+                    } else {
+                        "— DingTalk Stream Mode"
+                    }
+                ),
+                ChannelMenuChoice::QqOfficial => format!(
+                    "QQ Official {}",
+                    if config.qq.is_some() {
+                        "✅ connected"
+                    } else {
+                        "— Tencent QQ Bot"
+                    }
+                ),
+                ChannelMenuChoice::LarkFeishu => format!(
+                    "Lark/Feishu {}",
+                    if config.lark.is_some() {
+                        "✅ connected"
+                    } else {
+                        "— Lark/Feishu Bot"
+                    }
+                ),
+                ChannelMenuChoice::Done => "Done — finish setup".to_string(),
+            })
+            .collect();
 
-        let choice = Select::new()
+        let selection = Select::new()
             .with_prompt("  Connect a channel (or Done to continue)")
             .items(&options)
-            .default(11)
+            .default(options.len() - 1)
             .interact()?;
 
+        let choice = menu_choices
+            .get(selection)
+            .copied()
+            .unwrap_or(ChannelMenuChoice::Done);
+
         match choice {
-            0 => {
+            ChannelMenuChoice::Telegram => {
                 // ── Telegram ──
                 println!();
                 println!(
@@ -2677,10 +2833,11 @@ fn setup_channels() -> Result<ChannelsConfig> {
                     allowed_users,
                     stream_mode: StreamMode::default(),
                     draft_update_interval_ms: 1000,
+                    interrupt_on_new_message: false,
                     mention_only: false,
                 });
             }
-            1 => {
+            ChannelMenuChoice::Discord => {
                 // ── Discord ──
                 println!();
                 println!(
@@ -2779,7 +2936,7 @@ fn setup_channels() -> Result<ChannelsConfig> {
                     mention_only: false,
                 });
             }
-            2 => {
+            ChannelMenuChoice::Slack => {
                 // ── Slack ──
                 println!();
                 println!(
@@ -2904,7 +3061,7 @@ fn setup_channels() -> Result<ChannelsConfig> {
                     allowed_users,
                 });
             }
-            3 => {
+            ChannelMenuChoice::IMessage => {
                 // ── iMessage ──
                 println!();
                 println!(
@@ -2948,7 +3105,7 @@ fn setup_channels() -> Result<ChannelsConfig> {
                     style(&contacts_str).cyan()
                 );
             }
-            4 => {
+            ChannelMenuChoice::Matrix => {
                 // ── Matrix ──
                 println!();
                 println!(
@@ -3060,7 +3217,7 @@ fn setup_channels() -> Result<ChannelsConfig> {
                     allowed_users,
                 });
             }
-            5 => {
+            ChannelMenuChoice::WhatsApp => {
                 // ── WhatsApp ──
                 println!();
                 println!(
@@ -3147,14 +3304,17 @@ fn setup_channels() -> Result<ChannelsConfig> {
                 };
 
                 config.whatsapp = Some(WhatsAppConfig {
-                    access_token: access_token.trim().to_string(),
-                    phone_number_id: phone_number_id.trim().to_string(),
-                    verify_token: verify_token.trim().to_string(),
+                    access_token: Some(access_token.trim().to_string()),
+                    phone_number_id: Some(phone_number_id.trim().to_string()),
+                    verify_token: Some(verify_token.trim().to_string()),
                     app_secret: None, // Can be set via ZEROCLAW_WHATSAPP_APP_SECRET env var
+                    session_path: None,
+                    pair_phone: None,
+                    pair_code: None,
                     allowed_numbers,
                 });
             }
-            6 => {
+            ChannelMenuChoice::Linq => {
                 // ── Linq ──
                 println!();
                 println!(
@@ -3246,7 +3406,7 @@ fn setup_channels() -> Result<ChannelsConfig> {
                     allowed_senders,
                 });
             }
-            7 => {
+            ChannelMenuChoice::Irc => {
                 // ── IRC ──
                 println!();
                 println!(
@@ -3385,7 +3545,7 @@ fn setup_channels() -> Result<ChannelsConfig> {
                     verify_tls: Some(verify_tls),
                 });
             }
-            8 => {
+            ChannelMenuChoice::Webhook => {
                 // ── Webhook ──
                 println!();
                 println!(
@@ -3418,7 +3578,7 @@ fn setup_channels() -> Result<ChannelsConfig> {
                     style(&port).cyan()
                 );
             }
-            9 => {
+            ChannelMenuChoice::DingTalk => {
                 // ── DingTalk ──
                 println!();
                 println!(
@@ -3488,7 +3648,7 @@ fn setup_channels() -> Result<ChannelsConfig> {
                     allowed_users,
                 });
             }
-            10 => {
+            ChannelMenuChoice::QqOfficial => {
                 // ── QQ Official ──
                 println!();
                 println!(
@@ -3564,7 +3724,7 @@ fn setup_channels() -> Result<ChannelsConfig> {
                     allowed_users,
                 });
             }
-            10 => {
+            ChannelMenuChoice::LarkFeishu => {
                 // ── Lark/Feishu ──
                 println!();
                 println!(
@@ -3751,7 +3911,7 @@ fn setup_channels() -> Result<ChannelsConfig> {
                     port,
                 });
             }
-            _ => break, // Done
+            ChannelMenuChoice::Done => break,
         }
         println!();
     }
@@ -4992,12 +5152,17 @@ mod tests {
         );
         assert_eq!(default_model_for_provider("qwen"), "qwen-plus");
         assert_eq!(default_model_for_provider("qwen-intl"), "qwen-plus");
+        assert_eq!(default_model_for_provider("qwen-code"), "qwen3-coder-plus");
         assert_eq!(default_model_for_provider("glm-cn"), "glm-5");
         assert_eq!(default_model_for_provider("minimax-cn"), "MiniMax-M2.5");
         assert_eq!(default_model_for_provider("zai-cn"), "glm-5");
         assert_eq!(default_model_for_provider("gemini"), "gemini-2.5-pro");
         assert_eq!(default_model_for_provider("google"), "gemini-2.5-pro");
         assert_eq!(default_model_for_provider("kimi-code"), "kimi-for-coding");
+        assert_eq!(
+            default_model_for_provider("bedrock"),
+            "anthropic.claude-sonnet-4-5-20250929-v1:0"
+        );
         assert_eq!(
             default_model_for_provider("google-gemini"),
             "gemini-2.5-pro"
@@ -5022,6 +5187,8 @@ mod tests {
     fn canonical_provider_name_normalizes_regional_aliases() {
         assert_eq!(canonical_provider_name("qwen-intl"), "qwen");
         assert_eq!(canonical_provider_name("dashscope-us"), "qwen");
+        assert_eq!(canonical_provider_name("qwen-code"), "qwen-code");
+        assert_eq!(canonical_provider_name("qwen-oauth"), "qwen-code");
         assert_eq!(canonical_provider_name("moonshot-intl"), "moonshot");
         assert_eq!(canonical_provider_name("kimi-cn"), "moonshot");
         assert_eq!(canonical_provider_name("kimi_coding"), "kimi-code");
@@ -5032,6 +5199,7 @@ mod tests {
         assert_eq!(canonical_provider_name("zai-cn"), "zai");
         assert_eq!(canonical_provider_name("z.ai-global"), "zai");
         assert_eq!(canonical_provider_name("nvidia-nim"), "nvidia");
+        assert_eq!(canonical_provider_name("aws-bedrock"), "bedrock");
         assert_eq!(canonical_provider_name("build.nvidia.com"), "nvidia");
     }
 
@@ -5082,6 +5250,19 @@ mod tests {
     }
 
     #[test]
+    fn curated_models_for_bedrock_include_verified_model_ids() {
+        let ids: Vec<String> = curated_models_for_provider("bedrock")
+            .into_iter()
+            .map(|(id, _)| id)
+            .collect();
+
+        assert!(ids.contains(&"anthropic.claude-sonnet-4-6".to_string()));
+        assert!(ids.contains(&"anthropic.claude-opus-4-6-v1".to_string()));
+        assert!(ids.contains(&"anthropic.claude-haiku-4-5-20251001-v1:0".to_string()));
+        assert!(ids.contains(&"anthropic.claude-sonnet-4-5-20250929-v1:0".to_string()));
+    }
+
+    #[test]
     fn curated_models_for_moonshot_drop_deprecated_aliases() {
         let ids: Vec<String> = curated_models_for_provider("moonshot")
             .into_iter()
@@ -5116,6 +5297,18 @@ mod tests {
 
         assert!(ids.contains(&"kimi-for-coding".to_string()));
         assert!(ids.contains(&"kimi-k2.5".to_string()));
+    }
+
+    #[test]
+    fn curated_models_for_qwen_code_include_coding_plan_models() {
+        let ids: Vec<String> = curated_models_for_provider("qwen-code")
+            .into_iter()
+            .map(|(id, _)| id)
+            .collect();
+
+        assert!(ids.contains(&"qwen3-coder-plus".to_string()));
+        assert!(ids.contains(&"qwen3.5-plus".to_string()));
+        assert!(ids.contains(&"qwen3-max-2026-01-23".to_string()));
     }
 
     #[test]
@@ -5179,6 +5372,10 @@ mod tests {
         assert_eq!(
             curated_models_for_provider("nvidia"),
             curated_models_for_provider("build.nvidia.com")
+        );
+        assert_eq!(
+            curated_models_for_provider("bedrock"),
+            curated_models_for_provider("aws-bedrock")
         );
     }
 
@@ -5356,7 +5553,8 @@ mod tests {
 
         let config = Config {
             workspace_dir: tmp.path().to_path_buf(),
-            default_provider: Some("venice".to_string()),
+            // Use a non-provider channel key to keep this test deterministic and offline.
+            default_provider: Some("imessage".to_string()),
             ..Config::default()
         };
 
@@ -5384,6 +5582,8 @@ mod tests {
         assert_eq!(provider_env_var("qwen"), "DASHSCOPE_API_KEY");
         assert_eq!(provider_env_var("qwen-intl"), "DASHSCOPE_API_KEY");
         assert_eq!(provider_env_var("dashscope-us"), "DASHSCOPE_API_KEY");
+        assert_eq!(provider_env_var("qwen-code"), "QWEN_OAUTH_TOKEN");
+        assert_eq!(provider_env_var("qwen-oauth"), "QWEN_OAUTH_TOKEN");
         assert_eq!(provider_env_var("glm-cn"), "GLM_API_KEY");
         assert_eq!(provider_env_var("minimax-cn"), "MINIMAX_API_KEY");
         assert_eq!(provider_env_var("kimi-code"), "KIMI_CODE_API_KEY");

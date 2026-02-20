@@ -262,8 +262,8 @@ impl MatrixChannel {
                         if hinted != &whoami.user_id {
                             tracing::warn!(
                                 "Matrix configured user_id '{}' does not match whoami '{}'; using whoami.",
-                                hinted,
-                                whoami.user_id
+                                crate::security::redact(hinted),
+                                crate::security::redact(&whoami.user_id)
                             );
                         }
                     }
@@ -282,8 +282,8 @@ impl MatrixChannel {
                             if whoami_device_id != hinted {
                                 tracing::warn!(
                                     "Matrix configured device_id '{}' does not match whoami '{}'; using whoami.",
-                                    hinted,
-                                    whoami_device_id
+                                    crate::security::redact(hinted),
+                                    crate::security::redact(whoami_device_id)
                                 );
                             }
                             whoami_device_id.clone()
@@ -596,6 +596,7 @@ impl Channel for MatrixChannel {
                         .duration_since(std::time::UNIX_EPOCH)
                         .unwrap_or_default()
                         .as_secs(),
+                    thread_ts: None,
                 };
 
                 let _ = tx.send(msg).await;
@@ -726,7 +727,7 @@ mod tests {
             "!r:m".to_string(),
             vec![],
             Some("   ".to_string()),
-            Some("".to_string()),
+            Some(String::new()),
         );
 
         assert!(ch.session_owner_hint.is_none());

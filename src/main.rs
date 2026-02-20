@@ -39,6 +39,14 @@ use serde::{Deserialize, Serialize};
 use tracing::{info, warn};
 use tracing_subscriber::{fmt, EnvFilter};
 
+fn parse_temperature(s: &str) -> std::result::Result<f64, String> {
+    let t: f64 = s.parse().map_err(|e| format!("{e}"))?;
+    if !(0.0..=2.0).contains(&t) {
+        return Err("temperature must be between 0.0 and 2.0".to_string());
+    }
+    Ok(t)
+}
+
 mod agent;
 mod approval;
 mod auth;
@@ -58,6 +66,7 @@ mod identity;
 mod integrations;
 mod memory;
 mod migration;
+mod multimodal;
 mod observability;
 mod onboard;
 mod peripherals;
@@ -95,6 +104,8 @@ enum ServiceCommands {
     Start,
     /// Stop daemon service
     Stop,
+    /// Restart daemon service to apply latest config
+    Restart,
     /// Check daemon service status
     Status,
     /// Uninstall daemon service unit
@@ -120,13 +131,26 @@ enum Commands {
         /// Provider name (used in quick mode, default: openrouter)
         #[arg(long)]
         provider: Option<String>,
-
+        /// Model ID override (used in quick mode)
+        #[arg(long)]
+        model: Option<String>,
         /// Memory backend (sqlite, lucid, markdown, none) - used in quick mode, default: sqlite
         #[arg(long)]
         memory: Option<String>,
     },
 
     /// Start the AI agent loop
+    #[command(long_about = "\
+Start the AI agent loop.
+
+Launches an interactive chat session with the configured AI provider. \
+Use --message for single-shot queries without entering interactive mode.
+
+Examples:
+  zeroclaw agent                              # interactive session
+  zeroclaw agent -m \"Summarize today's logs\"  # single message
+  zeroclaw agent -p anthropic --model claude-sonnet-4-20250514
+  zeroclaw agent --peripheral nucleo-f401re:/dev/ttyACM0")]
     Agent {
         /// Single message mode (don't enter interactive mode)
         #[arg(short, long)]
@@ -141,7 +165,7 @@ enum Commands {
         model: Option<String>,
 
         /// Temperature (0.0 - 2.0)
-        #[arg(short, long, default_value = "0.7")]
+        #[arg(short, long, default_value = "0.7", value_parser = parse_temperature)]
         temperature: f64,
 
         /// Attach a peripheral (board:path, e.g. nucleo-f401re:/dev/ttyACM0)
@@ -150,6 +174,18 @@ enum Commands {
     },
 
     /// Start the gateway server (webhooks, websockets)
+    #[command(long_about = "\
+Start the gateway server (webhooks, websockets).
+
+Runs the HTTP/WebSocket gateway that accepts incoming webhook events \
+and WebSocket connections. Bind address defaults to the values in \
+your config file (gateway.host / gateway.port).
+
+Examples:
+  zeroclaw gateway                  # use config defaults
+  zeroclaw gateway -p 8080          # listen on port 8080
+  zeroclaw gateway --host 0.0.0.0   # bind to all interfaces
+  zeroclaw gateway -p 0             # random available port")]
     Gateway {
         /// Port to listen on (use 0 for random available port); defaults to config gateway.port
         #[arg(short, long)]
@@ -161,6 +197,21 @@ enum Commands {
     },
 
     /// Start long-running autonomous runtime (gateway + channels + heartbeat + scheduler)
+    #[command(long_about = "\
+Start the long-running autonomous daemon.
+
+Launches the full ZeroClaw runtime: gateway server, all configured \
+channels (Telegram, Discord, Slack, etc.), heartbeat monitor, and \
+the cron scheduler. This is the recommended way to run ZeroClaw in \
+production or as an always-on assistant.
+
+Use 'zeroclaw service install' to register the daemon as an OS \
+service (systemd/launchd) for auto-start on boot.
+
+Examples:
+  zeroclaw daemon                   # use config defaults
+  zeroclaw daemon -p 9090           # gateway on port 9090
+  zeroclaw daemon --host 127.0.0.1  # localhost only")]
     Daemon {
         /// Port to listen on (use 0 for random available port); defaults to config gateway.port
         #[arg(short, long)]
@@ -187,6 +238,25 @@ enum Commands {
     Status,
 
     /// Configure and manage scheduled tasks
+    #[command(long_about = "\
+Configure and manage scheduled tasks.
+
+Schedule recurring, one-shot, or interval-based tasks using cron \
+expressions, RFC 3339 timestamps, durations, or fixed intervals.
+
+Cron expressions use the standard 5-field format: \
+'min hour day month weekday'. Timezones default to UTC; \
+override with --tz and an IANA timezone name.
+
+Examples:
+  zeroclaw cron list
+  zeroclaw cron add '0 9 * * 1-5' 'Good morning' --tz America/New_York
+  zeroclaw cron add '*/30 * * * *' 'Check system health'
+  zeroclaw cron add-at 2025-01-15T14:00:00Z 'Send reminder'
+  zeroclaw cron add-every 60000 'Ping heartbeat'
+  zeroclaw cron once 30m 'Run backup in 30 minutes'
+  zeroclaw cron pause <task-id>
+  zeroclaw cron update <task-id> --expression '0 8 * * *' --tz Europe/London")]
     Cron {
         #[command(subcommand)]
         cron_command: CronCommands,
@@ -202,6 +272,19 @@ enum Commands {
     Providers,
 
     /// Manage channels (telegram, discord, slack)
+    #[command(long_about = "\
+Manage communication channels.
+
+Add, remove, list, and health-check channels that connect ZeroClaw \
+to messaging platforms. Supported channel types: telegram, discord, \
+slack, whatsapp, matrix, imessage, email.
+
+Examples:
+  zeroclaw channel list
+  zeroclaw channel doctor
+  zeroclaw channel add telegram '{\"bot_token\":\"...\",\"name\":\"my-bot\"}'
+  zeroclaw channel remove my-bot
+  zeroclaw channel bind-telegram zeroclaw_user")]
     Channel {
         #[command(subcommand)]
         channel_command: ChannelCommands,
@@ -232,16 +315,62 @@ enum Commands {
     },
 
     /// Discover and introspect USB hardware
+    #[command(long_about = "\
+Discover and introspect USB hardware.
+
+Enumerate connected USB devices, identify known development boards \
+(STM32 Nucleo, Arduino, ESP32), and retrieve chip information via \
+probe-rs / ST-Link.
+
+Examples:
+  zeroclaw hardware discover
+  zeroclaw hardware introspect /dev/ttyACM0
+  zeroclaw hardware info --chip STM32F401RETx")]
     Hardware {
         #[command(subcommand)]
         hardware_command: zeroclaw::HardwareCommands,
     },
 
     /// Manage hardware peripherals (STM32, RPi GPIO, etc.)
+    #[command(long_about = "\
+Manage hardware peripherals.
+
+Add, list, flash, and configure hardware boards that expose tools \
+to the agent (GPIO, sensors, actuators). Supported boards: \
+nucleo-f401re, rpi-gpio, esp32, arduino-uno.
+
+Examples:
+  zeroclaw peripheral list
+  zeroclaw peripheral add nucleo-f401re /dev/ttyACM0
+  zeroclaw peripheral add rpi-gpio native
+  zeroclaw peripheral flash --port /dev/cu.usbmodem12345
+  zeroclaw peripheral flash-nucleo")]
     Peripheral {
         #[command(subcommand)]
         peripheral_command: zeroclaw::PeripheralCommands,
     },
+
+    /// Manage configuration
+    #[command(long_about = "\
+Manage ZeroClaw configuration.
+
+Inspect and export configuration settings. Use 'schema' to dump \
+the full JSON Schema for the config file, which documents every \
+available key, type, and default value.
+
+Examples:
+  zeroclaw config schema              # print JSON Schema to stdout
+  zeroclaw config schema > schema.json")]
+    Config {
+        #[command(subcommand)]
+        config_command: ConfigCommands,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum ConfigCommands {
+    /// Dump the full configuration JSON Schema to stdout
+    Schema,
 }
 
 #[derive(Subcommand, Debug)]
@@ -381,6 +510,23 @@ enum CronCommands {
         /// Task ID
         id: String,
     },
+    /// Update a scheduled task
+    Update {
+        /// Task ID
+        id: String,
+        /// New cron expression
+        #[arg(long)]
+        expression: Option<String>,
+        /// New IANA timezone
+        #[arg(long)]
+        tz: Option<String>,
+        /// New command to run
+        #[arg(long)]
+        command: Option<String>,
+        /// New job name
+        #[arg(long)]
+        name: Option<String>,
+    },
     /// Pause a scheduled task
     Pause {
         /// Task ID
@@ -452,9 +598,9 @@ enum ChannelCommands {
 enum SkillCommands {
     /// List installed skills
     List,
-    /// Install a skill from a GitHub URL or local path
+    /// Install a skill from a git URL (HTTPS/SSH) or local path
     Install {
-        /// GitHub URL or local path
+        /// Git URL (HTTPS/SSH) or local path
         source: String,
     },
     /// Remove an installed skill
@@ -503,6 +649,7 @@ async fn main() -> Result<()> {
         channels_only,
         api_key,
         provider,
+        model,
         memory,
     } = &cli.command
     {
@@ -510,25 +657,30 @@ async fn main() -> Result<()> {
         let channels_only = *channels_only;
         let api_key = api_key.clone();
         let provider = provider.clone();
+        let model = model.clone();
         let memory = memory.clone();
 
         if interactive && channels_only {
             bail!("Use either --interactive or --channels-only, not both");
         }
-        if channels_only && (api_key.is_some() || provider.is_some() || memory.is_some()) {
-            bail!("--channels-only does not accept --api-key, --provider, or --memory");
+        if channels_only
+            && (api_key.is_some() || provider.is_some() || model.is_some() || memory.is_some())
+        {
+            bail!("--channels-only does not accept --api-key, --provider, --model, or --memory");
         }
-
-        let config = tokio::task::spawn_blocking(move || {
-            if channels_only {
-                onboard::run_channels_repair_wizard()
-            } else if interactive {
-                onboard::run_wizard()
-            } else {
-                onboard::run_quick_setup(api_key.as_deref(), provider.as_deref(), memory.as_deref())
-            }
-        })
-        .await??;
+        let config = if channels_only {
+            onboard::run_channels_repair_wizard().await
+        } else if interactive {
+            onboard::run_wizard().await
+        } else {
+            onboard::run_quick_setup(
+                api_key.as_deref(),
+                provider.as_deref(),
+                model.as_deref(),
+                memory.as_deref(),
+            )
+            .await
+        }?;
         // Auto-start channels if user said yes during wizard
         if std::env::var("ZEROCLAW_AUTOSTART_CHANNELS").as_deref() == Ok("1") {
             channels::start_channels(config).await?;
@@ -537,7 +689,7 @@ async fn main() -> Result<()> {
     }
 
     // All other commands need config loaded first
-    let mut config = Config::load_or_init()?;
+    let mut config = Config::load_or_init().await?;
     config.apply_env_overrides();
 
     match cli.command {
@@ -725,7 +877,7 @@ async fn main() -> Result<()> {
         Commands::Channel { channel_command } => match channel_command {
             ChannelCommands::Start => channels::start_channels(config).await,
             ChannelCommands::Doctor => channels::doctor_channels(config).await,
-            other => channels::handle_command(other, &config),
+            other => channels::handle_command(other, &config).await,
         },
 
         Commands::Integrations {
@@ -747,8 +899,19 @@ async fn main() -> Result<()> {
         }
 
         Commands::Peripheral { peripheral_command } => {
-            peripherals::handle_command(peripheral_command.clone(), &config)
+            peripherals::handle_command(peripheral_command.clone(), &config).await
         }
+
+        Commands::Config { config_command } => match config_command {
+            ConfigCommands::Schema => {
+                let schema = schemars::schema_for!(config::Config);
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&schema).expect("failed to serialize JSON Schema")
+                );
+                Ok(())
+            }
+        },
     }
 }
 

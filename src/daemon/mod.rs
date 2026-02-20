@@ -242,6 +242,7 @@ fn has_supervised_channels(config: &Config) -> bool {
         || irc.is_some()
         || lark.is_some()
         || dingtalk.is_some()
+        || linq.is_some()
         || qq.is_some()
 }
 
@@ -321,6 +322,7 @@ mod tests {
             allowed_users: vec![],
             stream_mode: crate::config::StreamMode::default(),
             draft_update_interval_ms: 1000,
+            interrupt_on_new_message: false,
             mention_only: false,
         });
         assert!(has_supervised_channels(&config));

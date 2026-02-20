@@ -13,6 +13,12 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT" /></a>
   <a href="NOTICE"><img src="https://img.shields.io/badge/contributors-27+-green.svg" alt="Contributors" /></a>
   <a href="https://buymeacoffee.com/argenistherose"><img src="https://img.shields.io/badge/Buy%20Me%20a%20Coffee-Donate-yellow.svg?style=flat&logo=buy-me-a-coffee" alt="Buy Me a Coffee" /></a>
+  <a href="https://x.com/zeroclawlabs?s=21"><img src="https://img.shields.io/badge/X-%40zeroclawlabs-000000?style=flat&logo=x&logoColor=white" alt="X: @zeroclawlabs" /></a>
+  <a href="https://www.xiaohongshu.com/user/profile/67cbfc43000000000d008307?xsec_token=AB73VnYnGNx5y36EtnnZfGmAmS-6Wzv8WMuGpfwfkg6Yc%3D&xsec_source=pc_search"><img src="https://img.shields.io/badge/Xiaohongshu-Official-FF2442?style=flat" alt="Xiaohongshu: Official" /></a>
+  <a href="https://t.me/zeroclawlabs"><img src="https://img.shields.io/badge/Telegram-%40zeroclawlabs-26A5E4?style=flat&logo=telegram&logoColor=white" alt="Telegram: @zeroclawlabs" /></a>
+  <a href="https://t.me/zeroclawlabs_cn"><img src="https://img.shields.io/badge/Telegram%20CN-%40zeroclawlabs__cn-26A5E4?style=flat&logo=telegram&logoColor=white" alt="Telegram CN: @zeroclawlabs_cn" /></a>
+  <a href="https://t.me/zeroclawlabs_ru"><img src="https://img.shields.io/badge/Telegram%20RU-%40zeroclawlabs__ru-26A5E4?style=flat&logo=telegram&logoColor=white" alt="Telegram RU: @zeroclawlabs_ru" /></a>
+  <a href="https://www.reddit.com/r/zeroclawlabs/"><img src="https://img.shields.io/badge/Reddit-r%2Fzeroclawlabs-FF4500?style=flat&logo=reddit&logoColor=white" alt="Reddit: r/zeroclawlabs" /></a>
 </p>
 <p align="center">
 Built by students and members of the Harvard, MIT, and Sundai.Club communities.
@@ -52,7 +58,8 @@ Use this board for important notices (breaking changes, security advisories, mai
 
 | Date (UTC) | Level | Notice | Action |
 |---|---|---|---|
-| 2026-02-19 | _Important_ | We have **not** launched an official website yet, and we are seeing impersonation attempts. Do **not** join any investment or fundraising activity claiming the ZeroClaw name. | Use this repository as the single source of truth. Follow [X (@zeroclawlabs)](https://x.com/zeroclawlabs?s=21) and [Xiaohongshu](https://www.xiaohongshu.com/user/profile/67cbfc43000000000d008307?xsec_token=AB73VnYnGNx5y36EtnnZfGmAmS-6Wzv8WMuGpfwfkg6Yc%3D&xsec_source=pc_search) for official updates. |
+| 2026-02-19 | _Critical_ | We are **not affiliated** with `openagen/zeroclaw` or `zeroclaw.org`. The `zeroclaw.org` domain currently points to the `openagen/zeroclaw` fork, and that domain/repository are impersonating our official website/project. | Do not trust information, binaries, fundraising, or announcements from those sources. Use only this repository and our verified social accounts. |
+| 2026-02-19 | _Important_ | We have **not** launched an official website yet, and we are seeing impersonation attempts. Do **not** join any investment or fundraising activity claiming the ZeroClaw name. | Use this repository as the single source of truth. Follow [X (@zeroclawlabs)](https://x.com/zeroclawlabs?s=21), [Reddit (r/zeroclawlabs)](https://www.reddit.com/r/zeroclawlabs/), [Telegram (@zeroclawlabs)](https://t.me/zeroclawlabs), [Telegram CN (@zeroclawlabs_cn)](https://t.me/zeroclawlabs_cn), [Telegram RU (@zeroclawlabs_ru)](https://t.me/zeroclawlabs_ru), and [Xiaohongshu](https://www.xiaohongshu.com/user/profile/67cbfc43000000000d008307?xsec_token=AB73VnYnGNx5y36EtnnZfGmAmS-6Wzv8WMuGpfwfkg6Yc%3D&xsec_source=pc_search) for official updates. |
 | 2026-02-19 | _Important_ | Anthropic updated the Authentication and Credential Use terms on 2026-02-19. OAuth authentication (Free, Pro, Max) is intended exclusively for Claude Code and Claude.ai; using OAuth tokens from Claude Free/Pro/Max in any other product, tool, or service (including Agent SDK) is not permitted and may violate the Consumer Terms of Service. | Please temporarily avoid Claude Code OAuth integrations to prevent potential loss. Original clause: [Authentication and Credential Use](https://code.claude.com/docs/en/legal-and-compliance#authentication-and-credential-use). |
 
 ### ✨ Features
@@ -81,7 +88,7 @@ Local machine quick benchmark (macOS arm64, Feb 2026) normalized for 0.8GHz edge
 | **Binary Size** | ~28MB (dist) | N/A (Scripts) | ~8MB | **3.4 MB** |
 | **Cost** | Mac Mini $599 | Linux SBC ~$50 | Linux Board $10 | **Any hardware $10** |
 
-> Notes: ZeroClaw results are measured on release builds using `/usr/bin/time -l`. OpenClaw requires Node.js runtime (typically ~390MB additional memory overhead), while NanoBot requires Python runtime. PicoClaw and ZeroClaw are static binaries.
+> Notes: ZeroClaw results are measured on release builds using `/usr/bin/time -l`. OpenClaw requires Node.js runtime (typically ~390MB additional memory overhead), while NanoBot requires Python runtime. PicoClaw and ZeroClaw are static binaries. The RAM figures above are runtime memory; build-time compilation requirements are higher.
 
 <p align="center">
   <img src="zero-claw.jpeg" alt="ZeroClaw vs OpenClaw Comparison" width="800" />
@@ -166,16 +173,43 @@ Or skip the steps above and install everything (system deps, Rust, ZeroClaw) in 
 curl -LsSf https://raw.githubusercontent.com/zeroclaw-labs/zeroclaw/main/scripts/install.sh | bash
 ```
 
+#### Compilation resource requirements
+
+Building from source needs more resources than running the resulting binary:
+
+| Resource | Minimum | Recommended |
+|---|---|---|
+| **RAM + swap** | 2 GB | 4 GB+ |
+| **Free disk** | 6 GB | 10 GB+ |
+
+If your host is below the minimum, use pre-built binaries:
+
+```bash
+./bootstrap.sh --prefer-prebuilt
+```
+
+To require binary-only install with no source fallback:
+
+```bash
+./bootstrap.sh --prebuilt-only
+```
+
 #### Optional
 
 - **Docker** — required only if using the [Docker sandboxed runtime](#runtime-support-current) (`runtime.kind = "docker"`). Install via your package manager or [docker.com](https://docs.docker.com/engine/install/).
 
-> **Note:** The default `cargo build --release` uses `codegen-units=1` for compatibility with low-memory devices (e.g., Raspberry Pi 3 with 1GB RAM). For faster builds on powerful machines, use `cargo build --profile release-fast`.
+> **Note:** The default `cargo build --release` uses `codegen-units=1` to lower peak compile pressure. For faster builds on powerful machines, use `cargo build --profile release-fast`.
 
 </details>
 
 
 ## Quick Start
+
+### Homebrew (macOS/Linuxbrew)
+
+```bash
+brew install zeroclaw
+```
 
 ### One-click bootstrap
 
@@ -188,8 +222,17 @@ cd zeroclaw
 # Optional: bootstrap dependencies + Rust on fresh machines
 ./bootstrap.sh --install-system-deps --install-rust
 
+# Optional: pre-built binary first (recommended on low-RAM/low-disk hosts)
+./bootstrap.sh --prefer-prebuilt
+
+# Optional: binary-only install (no source build fallback)
+./bootstrap.sh --prebuilt-only
+
 # Optional: run onboarding in the same flow
-./bootstrap.sh --onboard --api-key "sk-..." --provider openrouter
+./bootstrap.sh --onboard --api-key "sk-..." --provider openrouter [--model "openrouter/auto"]
+
+# Optional: run bootstrap + onboarding fully in Docker
+./bootstrap.sh --docker
 ```
 
 Remote one-liner (review first in security-sensitive environments):
@@ -200,6 +243,25 @@ curl -fsSL https://raw.githubusercontent.com/zeroclaw-labs/zeroclaw/main/scripts
 
 Details: [`docs/one-click-bootstrap.md`](docs/one-click-bootstrap.md) (toolchain mode may request `sudo` for system packages).
 
+### Pre-built binaries
+
+Release assets are published for:
+
+- Linux: `x86_64`, `aarch64`, `armv7`
+- macOS: `x86_64`, `aarch64`
+- Windows: `x86_64`
+
+Download the latest assets from:
+<https://github.com/zeroclaw-labs/zeroclaw/releases/latest>
+
+Example (ARM64 Linux):
+
+```bash
+curl -fsSLO https://github.com/zeroclaw-labs/zeroclaw/releases/latest/download/zeroclaw-aarch64-unknown-linux-gnu.tar.gz
+tar xzf zeroclaw-aarch64-unknown-linux-gnu.tar.gz
+install -m 0755 zeroclaw "$HOME/.cargo/bin/zeroclaw"
+```
+
 ```bash
 git clone https://github.com/zeroclaw-labs/zeroclaw.git
 cd zeroclaw
@@ -209,8 +271,8 @@ cargo install --path . --force --locked
 # Ensure ~/.cargo/bin is in your PATH
 export PATH="$HOME/.cargo/bin:$PATH"
 
-# Quick setup (no prompts)
-zeroclaw onboard --api-key sk-... --provider openrouter
+# Quick setup (no prompts, optional model specification)
+zeroclaw onboard --api-key sk-... --provider openrouter [--model "openrouter/auto"]
 
 # Or interactive wizard
 zeroclaw onboard --interactive
@@ -253,6 +315,7 @@ zeroclaw integrations info Telegram
 # Manage background service
 zeroclaw service install
 zeroclaw service status
+zeroclaw service restart
 
 # Migrate memory from OpenClaw (safe preview first)
 zeroclaw migrate openclaw --dry-run
@@ -502,6 +565,10 @@ WhatsApp uses Meta's Cloud API with webhooks (push-based, not polling):
 
 Config: `~/.zeroclaw/config.toml` (created by `onboard`)
 
+When `zeroclaw channel start` is already running, changes to `default_provider`,
+`default_model`, `default_temperature`, `api_key`, `api_url`, and `reliability.*`
+are hot-applied on the next inbound channel message.
+
 ```toml
 api_key = "sk-..."
 default_provider = "openrouter"
@@ -600,6 +667,8 @@ window_allowlist = []          # optional window title/process allowlist hints
 enabled = false                # opt-in: 1000+ OAuth apps via composio.dev
 # api_key = "cmp_..."          # optional: stored encrypted when [secrets].encrypt = true
 entity_id = "default"          # default user_id for Composio tool calls
+# Runtime tip: if execute asks for connected_account_id, run composio with
+# action='list_accounts' and app='gmail' (or your toolkit) to retrieve account IDs.
 
 [identity]
 format = "openclaw"            # "openclaw" (default, markdown files) or "aieos" (JSON)
@@ -776,7 +845,7 @@ See [aieos.org](https://aieos.org) for the full schema and live examples.
 | `service` | Manage user-level background service |
 | `doctor` | Diagnose daemon/scheduler/channel freshness |
 | `status` | Show full system status |
-| `cron` | Manage scheduled tasks (`list/add/add-at/add-every/once/remove/pause/resume`) |
+| `cron` | Manage scheduled tasks (`list/add/add-at/add-every/once/remove/update/pause/resume`) |
 | `models` | Refresh provider model catalogs (`models refresh`) |
 | `providers` | List supported providers and aliases |
 | `channel` | List/start/doctor channels and bind Telegram identities |
@@ -878,13 +947,42 @@ A heartfelt thank you to the communities and institutions that inspire and fuel 
 
 We're building in the open because the best ideas come from everywhere. If you're reading this, you're part of it. Welcome. 🦀❤️
 
+## ⚠️ Official Repository & Impersonation Warning
+
+**This is the only official ZeroClaw repository:**
+> https://github.com/zeroclaw-labs/zeroclaw
+
+Any other repository, organization, domain, or package claiming to be "ZeroClaw" or implying affiliation with ZeroClaw Labs is **unauthorized and not affiliated with this project**. Known unauthorized forks will be listed in [TRADEMARK.md](TRADEMARK.md).
+
+If you encounter impersonation or trademark misuse, please [open an issue](https://github.com/zeroclaw-labs/zeroclaw/issues).
+
+---
+
 ## License
 
-MIT — see [LICENSE](LICENSE) for license terms and attribution baseline
+ZeroClaw is dual-licensed for maximum openness and contributor protection:
+
+| License | Use case |
+|---|---|
+| [MIT](LICENSE) | Open-source, research, academic, personal use |
+| [Apache 2.0](LICENSE-APACHE) | Patent protection, institutional, commercial deployment |
+
+You may choose either license. **Contributors automatically grant rights under both** — see [CLA.md](CLA.md) for the full contributor agreement.
+
+### Trademark
+
+The **ZeroClaw** name and logo are trademarks of ZeroClaw Labs. This license does not grant permission to use them to imply endorsement or affiliation. See [TRADEMARK.md](TRADEMARK.md) for permitted and prohibited uses.
+
+### Contributor Protections
+
+- You **retain copyright** of your contributions
+- **Patent grant** (Apache 2.0) shields you from patent claims by other contributors
+- Your contributions are **permanently attributed** in commit history and [NOTICE](NOTICE)
+- No trademark rights are transferred by contributing
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). Implement a trait, submit a PR:
+See [CONTRIBUTING.md](CONTRIBUTING.md) and [CLA.md](CLA.md). Implement a trait, submit a PR:
 - CI workflow guide: [docs/ci-map.md](docs/ci-map.md)
 - New `Provider` → `src/providers/`
 - New `Channel` → `src/channels/`
