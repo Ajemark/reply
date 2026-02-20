@@ -3250,6 +3250,48 @@ impl Config {
             self.gateway.allow_public_bind = val == "1" || val.eq_ignore_ascii_case("true");
         }
 
+        // Telegram Bot Token: TELEGRAM_BOT_TOKEN
+        if let Ok(token) = std::env::var("TELEGRAM_BOT_TOKEN") {
+            if !token.is_empty() {
+                if let Some(telegram) = &mut self.channels_config.telegram {
+                    telegram.bot_token = token;
+                } else {
+                    self.channels_config.telegram = Some(TelegramConfig {
+                        bot_token: token,
+                        allowed_users: Vec::new(),
+                        stream_mode: StreamMode::default(),
+                        draft_update_interval_ms: 1000,
+                        interrupt_on_new_message: false,
+                        mention_only: false,
+                    });
+                }
+            }
+        }
+
+        // Telegram Allowed Users: TELEGRAM_ALLOWED_USERS
+        if let Ok(users) = std::env::var("TELEGRAM_ALLOWED_USERS") {
+            if !users.is_empty() {
+                let parsed_users: Vec<String> = users
+                    .split(',')
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect();
+                    
+                if let Some(telegram) = &mut self.channels_config.telegram {
+                    telegram.allowed_users = parsed_users;
+                } else {
+                    self.channels_config.telegram = Some(TelegramConfig {
+                        bot_token: String::new(), // Will be sterile if token isn't provided
+                        allowed_users: parsed_users,
+                        stream_mode: StreamMode::default(),
+                        draft_update_interval_ms: 1000,
+                        interrupt_on_new_message: false,
+                        mention_only: false,
+                    });
+                }
+            }
+        }
+
         // Temperature: ZEROCLAW_TEMPERATURE
         if let Ok(temp_str) = std::env::var("ZEROCLAW_TEMPERATURE") {
             if let Ok(temp) = temp_str.parse::<f64>() {
