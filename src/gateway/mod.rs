@@ -521,6 +521,7 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
 
     // Build router with middleware
     let app = Router::new()
+        .route("/", get(handle_index))
         .route("/health", get(handle_health))
         .route("/metrics", get(handle_metrics))
         .route("/pair", post(handle_pair))
@@ -557,6 +558,128 @@ async fn handle_health(State(state): State<AppState>) -> impl IntoResponse {
         "runtime": crate::health::snapshot_json(),
     });
     Json(body)
+}
+
+/// GET / — Landing page
+async fn handle_index(State(state): State<AppState>) -> impl IntoResponse {
+    let pairing_info = if let Some(code) = state.pairing.pairing_code() {
+        format!(
+            r#"<div class="card pairing">
+                <h2>🔐 Pairing Required</h2>
+                <p>Use the one-time code below to pair your client:</p>
+                <div class="code">{}</div>
+                <p class="hint">Send: <code>POST /pair</code> with header <code>X-Pairing-Code: {}</code></p>
+            </div>"#,
+            code, code
+        )
+    } else if state.pairing.is_paired() {
+        r#"<div class="card paired">
+            <h2>✅ System Paired</h2>
+            <p>Clients are currently connected and authenticated.</p>
+        </div>"#.to_string()
+    } else {
+         r#"<div class="card ready">
+            <h2>🟢 System Ready</h2>
+            <p>Pairing is disabled or all requests are currently accepted.</p>
+        </div>"#.to_string()
+    };
+
+    let html = format!(
+        r#"<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ZeroClaw Gateway</title>
+    <style>
+        :root {{
+            --bg: #0f172a;
+            --card-bg: #1e293b;
+            --text: #f8fafc;
+            --accent: #38bdf8;
+            --success: #22c55e;
+            --warning: #f59e0b;
+        }}
+        body {{
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+        }}
+        .container {{
+            width: 100%;
+            max-width: 500px;
+            padding: 20px;
+            text-align: center;
+        }}
+        .logo {{
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }}
+        h1 {{
+            font-size: 1.5rem;
+            margin-bottom: 2rem;
+            color: var(--accent);
+        }}
+        .card {{
+            background: var(--card-bg);
+            padding: 2rem;
+            border-radius: 1rem;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }}
+        .code {{
+            font-family: monospace;
+            font-size: 2.5rem;
+            letter-spacing: 0.5rem;
+            margin: 1.5rem 0;
+            color: var(--accent);
+            background: rgba(0, 0, 0, 0.2);
+            padding: 1rem;
+            border-radius: 0.5rem;
+        }}
+        .hint {{
+            font-size: 0.875rem;
+            opacity: 0.7;
+        }}
+        code {{
+            background: rgba(0, 0, 0, 0.3);
+            padding: 2px 4px;
+            border-radius: 4px;
+        }}
+        .endpoints {{
+            margin-top: 2rem;
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+            font-size: 0.875rem;
+        }}
+        .endpoints a {{
+            color: var(--accent);
+            text-decoration: none;
+        }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">🦀</div>
+        <h1>ZeroClaw Gateway</h1>
+        {}
+        <div class="endpoints">
+            <a href="/health">Health</a>
+            <a href="/metrics">Metrics</a>
+        </div>
+    </div>
+</body>
+</html>"#,
+        pairing_info
+    );
+
+    axum::response::Html(html)
 }
 
 /// Prometheus content type for text exposition format.

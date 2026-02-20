@@ -1,5 +1,3 @@
-# syntax=docker/dockerfile:1.7
-
 # ── Stage 1: Build ────────────────────────────────────────────
 FROM rust:1.93-slim@sha256:9663b80a1621253d30b146454f903de48f0af925c967be48c84745537cd35d8b AS builder
 
@@ -89,21 +87,24 @@ EXPOSE 3000
 ENTRYPOINT ["zeroclaw"]
 CMD ["gateway"]
 
-# ── Stage 3: Production Runtime (Distroless) ─────────────────
-FROM gcr.io/distroless/cc-debian13:nonroot@sha256:84fcd3c223b144b0cb6edc5ecc75641819842a9679a3a58fd6294bec47532bf7 AS release
+# ── Stage 3: Production Runtime (Full Slim) ─────────────────
+FROM rust:1.93-slim@sha256:9663b80a1621253d30b146454f903de48f0af925c967be48c84745537cd35d8b AS release
 
-COPY --from=builder /app/zeroclaw /usr/local/bin/zeroclaw
-COPY --from=builder /zeroclaw-data /zeroclaw-data
+# Ensure git and ca-certificates are present (though likely already in slim)
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    curl \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --chown=65534:65534 --from=builder /app/zeroclaw /usr/local/bin/zeroclaw
+COPY --chown=65534:65534 --from=builder /zeroclaw-data /zeroclaw-data
 
 # Environment setup
 ENV ZEROCLAW_WORKSPACE=/zeroclaw-data/workspace
 ENV HOME=/zeroclaw-data
-# Default provider (model is set in config.toml, not here,
-# so config file edits are not silently overridden)
 ENV PROVIDER="openrouter"
 ENV ZEROCLAW_GATEWAY_PORT=3000
-
-# API_KEY must be provided at runtime!
 
 WORKDIR /zeroclaw-data
 USER 65534:65534

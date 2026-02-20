@@ -70,11 +70,13 @@ fn has_launchable_channels(channels: &ChannelsConfig) -> bool {
         matrix,
         signal,
         whatsapp,
+        linq,
         email,
         irc,
         lark,
         dingtalk,
         qq,
+        ..
     } = channels;
 
     telegram.is_some()
@@ -85,6 +87,7 @@ fn has_launchable_channels(channels: &ChannelsConfig) -> bool {
         || matrix.is_some()
         || signal.is_some()
         || whatsapp.is_some()
+        || linq.is_some()
         || email.is_some()
         || irc.is_some()
         || lark.is_some()
