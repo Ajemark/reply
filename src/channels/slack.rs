@@ -6,14 +6,21 @@ pub struct SlackChannel {
     bot_token: String,
     channel_id: Option<String>,
     allowed_users: Vec<String>,
+    suppress_typing: bool,
 }
 
 impl SlackChannel {
-    pub fn new(bot_token: String, channel_id: Option<String>, allowed_users: Vec<String>) -> Self {
+    pub fn new(
+        bot_token: String,
+        channel_id: Option<String>,
+        allowed_users: Vec<String>,
+        suppress_typing: bool,
+    ) -> Self {
         Self {
             bot_token,
             channel_id,
             allowed_users,
+            suppress_typing,
         }
     }
 
@@ -62,6 +69,10 @@ impl Channel for SlackChannel {
         "slack"
     }
 
+    fn is_typing_suppressed(&self) -> bool {
+        self.suppress_typing
+    }
+
     async fn send(&self, message: &SendMessage) -> anyhow::Result<()> {
         let mut body = serde_json::json!({
             "channel": message.recipient,
@@ -98,6 +109,127 @@ impl Channel for SlackChannel {
                 .and_then(|e| e.as_str())
                 .unwrap_or("unknown");
             anyhow::bail!("Slack chat.postMessage failed: {err}");
+        }
+
+        Ok(())
+    }
+
+    fn supports_status_updates(&self) -> bool {
+        true
+    }
+
+    async fn send_draft(&self, message: &SendMessage) -> anyhow::Result<Option<String>> {
+        let mut body = serde_json::json!({
+            "channel": message.recipient,
+            "text": message.content
+        });
+
+        if let Some(ref ts) = message.thread_ts {
+            body["thread_ts"] = serde_json::json!(ts);
+        }
+
+        let resp = self
+            .http_client()
+            .post("https://slack.com/api/chat.postMessage")
+            .bearer_auth(&self.bot_token)
+            .json(&body)
+            .send()
+            .await?;
+
+        let status = resp.status();
+        let body_str = resp
+            .text()
+            .await
+            .unwrap_or_else(|e| format!("<failed to read response body: {e}>"));
+
+        if !status.is_success() {
+            anyhow::bail!("Slack send_draft failed ({status}): {body_str}");
+        }
+
+        let parsed: serde_json::Value = serde_json::from_str(&body_str).unwrap_or_default();
+        if parsed.get("ok") == Some(&serde_json::Value::Bool(false)) {
+            let err = parsed
+                .get("error")
+                .and_then(|e| e.as_str())
+                .unwrap_or("unknown");
+            anyhow::bail!("Slack send_draft failed: {err}");
+        }
+
+        Ok(parsed.get("ts").and_then(|ts| ts.as_str()).map(|s| s.to_string()))
+    }
+
+    async fn finalize_draft(
+        &self,
+        recipient: &str,
+        message_id: &str,
+        text: &str,
+    ) -> anyhow::Result<()> {
+        let body = serde_json::json!({
+            "channel": recipient,
+            "ts": message_id,
+            "text": text
+        });
+
+        let resp = self
+            .http_client()
+            .post("https://slack.com/api/chat.update")
+            .bearer_auth(&self.bot_token)
+            .json(&body)
+            .send()
+            .await?;
+
+        let status = resp.status();
+        let body_str = resp
+            .text()
+            .await
+            .unwrap_or_else(|e| format!("<failed to read response body: {e}>"));
+
+        if !status.is_success() {
+            tracing::warn!("Slack finalize_draft failed ({status}): {body_str}");
+            return self.send(&SendMessage::new(text, recipient)).await;
+        }
+
+        let parsed: serde_json::Value = serde_json::from_str(&body_str).unwrap_or_default();
+        if parsed.get("ok") == Some(&serde_json::Value::Bool(false)) {
+            let err = parsed
+                .get("error")
+                .and_then(|e| e.as_str())
+                .unwrap_or("unknown");
+            tracing::warn!("Slack finalize_draft API error: {err}");
+            return self.send(&SendMessage::new(text, recipient)).await;
+        }
+
+        Ok(())
+    }
+
+    async fn cancel_draft(&self, recipient: &str, message_id: &str) -> anyhow::Result<()> {
+        let body = serde_json::json!({
+            "channel": recipient,
+            "ts": message_id
+        });
+
+        let resp = self
+            .http_client()
+            .post("https://slack.com/api/chat.delete")
+            .bearer_auth(&self.bot_token)
+            .json(&body)
+            .send()
+            .await?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            tracing::debug!("Slack cancel_draft network error ({status})");
+            return Ok(());
+        }
+
+        let body_str = resp.text().await.unwrap_or_default();
+        let parsed: serde_json::Value = serde_json::from_str(&body_str).unwrap_or_default();
+        if parsed.get("ok") == Some(&serde_json::Value::Bool(false)) {
+            let err = parsed
+                .get("error")
+                .and_then(|e| e.as_str())
+                .unwrap_or("unknown");
+            tracing::debug!("Slack cancel_draft API error: {err}");
         }
 
         Ok(())
@@ -211,32 +343,32 @@ mod tests {
 
     #[test]
     fn slack_channel_name() {
-        let ch = SlackChannel::new("xoxb-fake".into(), None, vec![]);
+        let ch = SlackChannel::new("xoxb-fake".into(), None, vec![], false);
         assert_eq!(ch.name(), "slack");
     }
 
     #[test]
     fn slack_channel_with_channel_id() {
-        let ch = SlackChannel::new("xoxb-fake".into(), Some("C12345".into()), vec![]);
+        let ch = SlackChannel::new("xoxb-fake".into(), Some("C12345".into()), vec![], false);
         assert_eq!(ch.channel_id, Some("C12345".to_string()));
     }
 
     #[test]
     fn empty_allowlist_denies_everyone() {
-        let ch = SlackChannel::new("xoxb-fake".into(), None, vec![]);
+        let ch = SlackChannel::new("xoxb-fake".into(), None, vec![], false);
         assert!(!ch.is_user_allowed("U12345"));
         assert!(!ch.is_user_allowed("anyone"));
     }
 
     #[test]
     fn wildcard_allows_everyone() {
-        let ch = SlackChannel::new("xoxb-fake".into(), None, vec!["*".into()]);
+        let ch = SlackChannel::new("xoxb-fake".into(), None, vec!["*".into()], false);
         assert!(ch.is_user_allowed("U12345"));
     }
 
     #[test]
     fn specific_allowlist_filters() {
-        let ch = SlackChannel::new("xoxb-fake".into(), None, vec!["U111".into(), "U222".into()]);
+        let ch = SlackChannel::new("xoxb-fake".into(), None, vec!["U111".into(), "U222".into()], false);
         assert!(ch.is_user_allowed("U111"));
         assert!(ch.is_user_allowed("U222"));
         assert!(!ch.is_user_allowed("U333"));
@@ -244,27 +376,27 @@ mod tests {
 
     #[test]
     fn allowlist_exact_match_not_substring() {
-        let ch = SlackChannel::new("xoxb-fake".into(), None, vec!["U111".into()]);
+        let ch = SlackChannel::new("xoxb-fake".into(), None, vec!["U111".into()], false);
         assert!(!ch.is_user_allowed("U1111"));
         assert!(!ch.is_user_allowed("U11"));
     }
 
     #[test]
     fn allowlist_empty_user_id() {
-        let ch = SlackChannel::new("xoxb-fake".into(), None, vec!["U111".into()]);
+        let ch = SlackChannel::new("xoxb-fake".into(), None, vec!["U111".into()], false);
         assert!(!ch.is_user_allowed(""));
     }
 
     #[test]
     fn allowlist_case_sensitive() {
-        let ch = SlackChannel::new("xoxb-fake".into(), None, vec!["U111".into()]);
+        let ch = SlackChannel::new("xoxb-fake".into(), None, vec!["U111".into()], false);
         assert!(ch.is_user_allowed("U111"));
         assert!(!ch.is_user_allowed("u111"));
     }
 
     #[test]
     fn allowlist_wildcard_and_specific() {
-        let ch = SlackChannel::new("xoxb-fake".into(), None, vec!["U111".into(), "*".into()]);
+        let ch = SlackChannel::new("xoxb-fake".into(), None, vec!["U111".into(), "*".into()], false);
         assert!(ch.is_user_allowed("U111"));
         assert!(ch.is_user_allowed("anyone"));
     }

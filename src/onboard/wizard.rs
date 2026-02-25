@@ -2835,6 +2835,7 @@ fn setup_channels() -> Result<ChannelsConfig> {
                     draft_update_interval_ms: 1000,
                     interrupt_on_new_message: false,
                     mention_only: false,
+                    suppress_typing: false,
                 });
             }
             ChannelMenuChoice::Discord => {
@@ -2921,19 +2922,13 @@ fn setup_channels() -> Result<ChannelsConfig> {
                         .collect()
                 };
 
-                if allowed_users.is_empty() {
-                    println!(
-                        "  {} No users allowlisted — Discord inbound messages will be denied until you add IDs or '*'.",
-                        style("⚠").yellow().bold()
-                    );
-                }
-
                 config.discord = Some(DiscordConfig {
                     bot_token: token,
                     guild_id: if guild.is_empty() { None } else { Some(guild) },
                     allowed_users,
                     listen_to_bots: false,
                     mention_only: false,
+                    suppress_typing: false,
                 });
             }
             ChannelMenuChoice::Slack => {
@@ -3059,6 +3054,7 @@ fn setup_channels() -> Result<ChannelsConfig> {
                         Some(channel)
                     },
                     allowed_users,
+                    suppress_typing: false,
                 });
             }
             ChannelMenuChoice::IMessage => {
@@ -5668,6 +5664,7 @@ mod tests {
             allowed_users: vec!["*".into()],
             thread_replies: Some(true),
             mention_only: Some(false),
+            suppress_typing: false,
         });
         assert!(has_launchable_channels(&channels));
 

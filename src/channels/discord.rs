@@ -13,6 +13,7 @@ pub struct DiscordChannel {
     allowed_users: Vec<String>,
     listen_to_bots: bool,
     mention_only: bool,
+    suppress_typing: bool,
     typing_handle: Mutex<Option<tokio::task::JoinHandle<()>>>,
 }
 
@@ -23,6 +24,7 @@ impl DiscordChannel {
         allowed_users: Vec<String>,
         listen_to_bots: bool,
         mention_only: bool,
+        suppress_typing: bool,
     ) -> Self {
         Self {
             bot_token,
@@ -30,6 +32,7 @@ impl DiscordChannel {
             allowed_users,
             listen_to_bots,
             mention_only,
+            suppress_typing,
             typing_handle: Mutex::new(None),
         }
     }
@@ -188,6 +191,10 @@ impl Channel for DiscordChannel {
         "discord"
     }
 
+    fn is_typing_suppressed(&self) -> bool {
+        self.suppress_typing
+    }
+
     async fn send(&self, message: &SendMessage) -> anyhow::Result<()> {
         let chunks = split_message_for_discord(&message.content);
 
@@ -220,6 +227,136 @@ impl Channel for DiscordChannel {
             if i < chunks.len() - 1 {
                 tokio::time::sleep(std::time::Duration::from_millis(500)).await;
             }
+        }
+
+        Ok(())
+    }
+
+    fn supports_status_updates(&self) -> bool {
+        true
+    }
+
+    async fn send_draft(&self, message: &SendMessage) -> anyhow::Result<Option<String>> {
+        let url = format!(
+            "https://discord.com/api/v10/channels/{}/messages",
+            message.recipient
+        );
+
+        let body = json!({
+            "content": message.content
+        });
+
+        let resp = self
+            .http_client()
+            .post(&url)
+            .header("Authorization", format!("Bot {}", self.bot_token))
+            .json(&body)
+            .send()
+            .await?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let err = resp
+                .text()
+                .await
+                .unwrap_or_else(|e| format!("<failed to read response body: {e}>"));
+            anyhow::bail!("Discord send_draft failed ({status}): {err}");
+        }
+
+        let data: serde_json::Value = resp.json().await?;
+        Ok(data.get("id").and_then(|id| id.as_str()).map(|s| s.to_string()))
+    }
+
+    async fn finalize_draft(
+        &self,
+        recipient: &str,
+        message_id: &str,
+        text: &str,
+    ) -> anyhow::Result<()> {
+        let chunks = split_message_for_discord(text);
+
+        if chunks.is_empty() {
+            return Ok(());
+        }
+
+        // Edit the existing draft message with the first chunk
+        let url = format!(
+            "https://discord.com/api/v10/channels/{}/messages/{}",
+            recipient, message_id
+        );
+
+        let body = json!({
+            "content": chunks[0]
+        });
+
+        let resp = self
+            .http_client()
+            .patch(&url)
+            .header("Authorization", format!("Bot {}", self.bot_token))
+            .json(&body)
+            .send()
+            .await?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let err = resp
+                .text()
+                .await
+                .unwrap_or_else(|e| format!("<failed to read response body: {e}>"));
+            tracing::warn!("Discord finalize_draft edit failed ({status}): {err}");
+
+            // Fallback to sending as new message if edit fails
+            return self.send(&SendMessage::new(text, recipient)).await;
+        }
+
+        // Send any remaining chunks as new messages
+        for chunk in chunks.iter().skip(1) {
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            
+            let url = format!("https://discord.com/api/v10/channels/{}/messages", recipient);
+            let body = json!({ "content": chunk });
+
+            let resp = self
+                .http_client()
+                .post(&url)
+                .header("Authorization", format!("Bot {}", self.bot_token))
+                .json(&body)
+                .send()
+                .await?;
+
+            if !resp.status().is_success() {
+                let status = resp.status();
+                let err = resp
+                    .text()
+                    .await
+                    .unwrap_or_else(|e| format!("<failed to read response body: {e}>"));
+                anyhow::bail!("Discord finalize_draft subsequent chunk failed ({status}): {err}");
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn cancel_draft(&self, recipient: &str, message_id: &str) -> anyhow::Result<()> {
+        let url = format!(
+            "https://discord.com/api/v10/channels/{}/messages/{}",
+            recipient, message_id
+        );
+
+        let resp = self
+            .http_client()
+            .delete(&url)
+            .header("Authorization", format!("Bot {}", self.bot_token))
+            .send()
+            .await?;
+
+        if !resp.status().is_success() && resp.status().as_u16() != 404 {
+            let status = resp.status();
+            let err = resp
+                .text()
+                .await
+                .unwrap_or_else(|e| format!("<failed to read response body: {e}>"));
+            tracing::debug!("Discord cancel_draft failed ({status}): {err}");
         }
 
         Ok(())
@@ -478,7 +615,7 @@ mod tests {
 
     #[test]
     fn discord_channel_name() {
-        let ch = DiscordChannel::new("fake".into(), None, vec![], false, false);
+        let ch = DiscordChannel::new("fake".into(), None, vec![], false, false, false);
         assert_eq!(ch.name(), "discord");
     }
 
@@ -499,14 +636,14 @@ mod tests {
 
     #[test]
     fn empty_allowlist_denies_everyone() {
-        let ch = DiscordChannel::new("fake".into(), None, vec![], false, false);
+        let ch = DiscordChannel::new("fake".into(), None, vec![], false, false, false);
         assert!(!ch.is_user_allowed("12345"));
         assert!(!ch.is_user_allowed("anyone"));
     }
 
     #[test]
     fn wildcard_allows_everyone() {
-        let ch = DiscordChannel::new("fake".into(), None, vec!["*".into()], false, false);
+        let ch = DiscordChannel::new("fake".into(), None, vec!["*".into()], false, false, false);
         assert!(ch.is_user_allowed("12345"));
         assert!(ch.is_user_allowed("anyone"));
     }
@@ -519,6 +656,7 @@ mod tests {
             vec!["111".into(), "222".into()],
             false,
             false,
+            false,
         );
         assert!(ch.is_user_allowed("111"));
         assert!(ch.is_user_allowed("222"));
@@ -528,7 +666,7 @@ mod tests {
 
     #[test]
     fn allowlist_is_exact_match_not_substring() {
-        let ch = DiscordChannel::new("fake".into(), None, vec!["111".into()], false, false);
+        let ch = DiscordChannel::new("fake".into(), None, vec!["111".into()], false, false, false);
         assert!(!ch.is_user_allowed("1111"));
         assert!(!ch.is_user_allowed("11"));
         assert!(!ch.is_user_allowed("0111"));
@@ -536,7 +674,7 @@ mod tests {
 
     #[test]
     fn allowlist_empty_string_user_id() {
-        let ch = DiscordChannel::new("fake".into(), None, vec!["111".into()], false, false);
+        let ch = DiscordChannel::new("fake".into(), None, vec!["111".into()], false, false, false);
         assert!(!ch.is_user_allowed(""));
     }
 
@@ -555,7 +693,7 @@ mod tests {
 
     #[test]
     fn allowlist_case_sensitive() {
-        let ch = DiscordChannel::new("fake".into(), None, vec!["ABC".into()], false, false);
+        let ch = DiscordChannel::new("fake".into(), None, vec!["ABC".into()], false, false, false);
         assert!(ch.is_user_allowed("ABC"));
         assert!(!ch.is_user_allowed("abc"));
         assert!(!ch.is_user_allowed("Abc"));
@@ -755,14 +893,14 @@ mod tests {
 
     #[test]
     fn typing_handle_starts_as_none() {
-        let ch = DiscordChannel::new("fake".into(), None, vec![], false, false);
+        let ch = DiscordChannel::new("fake".into(), None, vec![], false, false, false);
         let guard = ch.typing_handle.lock();
         assert!(guard.is_none());
     }
 
     #[tokio::test]
     async fn start_typing_sets_handle() {
-        let ch = DiscordChannel::new("fake".into(), None, vec![], false, false);
+        let ch = DiscordChannel::new("fake".into(), None, vec![], false, false, false);
         let _ = ch.start_typing("123456").await;
         let guard = ch.typing_handle.lock();
         assert!(guard.is_some());
@@ -770,7 +908,7 @@ mod tests {
 
     #[tokio::test]
     async fn stop_typing_clears_handle() {
-        let ch = DiscordChannel::new("fake".into(), None, vec![], false, false);
+        let ch = DiscordChannel::new("fake".into(), None, vec![], false, false, false);
         let _ = ch.start_typing("123456").await;
         let _ = ch.stop_typing("123456").await;
         let guard = ch.typing_handle.lock();
@@ -779,14 +917,14 @@ mod tests {
 
     #[tokio::test]
     async fn stop_typing_is_idempotent() {
-        let ch = DiscordChannel::new("fake".into(), None, vec![], false, false);
+        let ch = DiscordChannel::new("fake".into(), None, vec![], false, false, false);
         assert!(ch.stop_typing("123456").await.is_ok());
         assert!(ch.stop_typing("123456").await.is_ok());
     }
 
     #[tokio::test]
     async fn start_typing_replaces_existing_task() {
-        let ch = DiscordChannel::new("fake".into(), None, vec![], false, false);
+        let ch = DiscordChannel::new("fake".into(), None, vec![], false, false, false);
         let _ = ch.start_typing("111").await;
         let _ = ch.start_typing("222").await;
         let guard = ch.typing_handle.lock();

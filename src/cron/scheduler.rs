@@ -263,6 +263,7 @@ async fn deliver_if_configured(config: &Config, job: &CronJob, output: &str) -> 
                 tg.bot_token.clone(),
                 tg.allowed_users.clone(),
                 tg.mention_only,
+                tg.suppress_typing,
             );
             channel.send(&SendMessage::new(output, target)).await?;
         }
@@ -278,6 +279,7 @@ async fn deliver_if_configured(config: &Config, job: &CronJob, output: &str) -> 
                 dc.allowed_users.clone(),
                 dc.listen_to_bots,
                 dc.mention_only,
+                dc.suppress_typing,
             );
             channel.send(&SendMessage::new(output, target)).await?;
         }
@@ -291,6 +293,7 @@ async fn deliver_if_configured(config: &Config, job: &CronJob, output: &str) -> 
                 sl.bot_token.clone(),
                 sl.channel_id.clone(),
                 sl.allowed_users.clone(),
+                sl.suppress_typing,
             );
             channel.send(&SendMessage::new(output, target)).await?;
         }
@@ -307,6 +310,7 @@ async fn deliver_if_configured(config: &Config, job: &CronJob, output: &str) -> 
                 mm.allowed_users.clone(),
                 mm.thread_replies.unwrap_or(true),
                 mm.mention_only.unwrap_or(false),
+                mm.suppress_typing,
             );
             channel.send(&SendMessage::new(output, target)).await?;
         }

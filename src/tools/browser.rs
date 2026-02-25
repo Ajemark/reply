@@ -342,15 +342,18 @@ impl BrowserTool {
             }
             BrowserBackendKind::RustNative => {
                 if !Self::rust_native_compiled() {
+                    tracing::error!("browser.backend='rust_native' requires build feature 'browser-native'");
                     anyhow::bail!(
                         "browser.backend='rust_native' requires build feature 'browser-native'"
                     );
                 }
                 if !self.rust_native_available() {
+                    tracing::error!("Rust-native browser backend is enabled but WebDriver endpoint is unreachable at {}", self.native_webdriver_url);
                     anyhow::bail!(
                         "Rust-native browser backend is enabled but WebDriver endpoint is unreachable. Set browser.native_webdriver_url and start a compatible driver"
                     );
                 }
+                tracing::info!("RustNative browser backend successfully initialized");
                 Ok(ResolvedBackend::RustNative)
             }
             BrowserBackendKind::ComputerUse => {
@@ -363,9 +366,11 @@ impl BrowserTool {
             }
             BrowserBackendKind::Auto => {
                 if Self::rust_native_compiled() && self.rust_native_available() {
+                    tracing::info!("browser.backend='auto' resolved to RustNative");
                     return Ok(ResolvedBackend::RustNative);
                 }
                 if Self::is_agent_browser_available().await {
+                    tracing::info!("browser.backend='auto' resolved to AgentBrowser");
                     return Ok(ResolvedBackend::AgentBrowser);
                 }
 

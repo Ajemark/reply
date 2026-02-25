@@ -2270,6 +2270,9 @@ pub struct TelegramConfig {
     /// Direct messages are always processed.
     #[serde(default)]
     pub mention_only: bool,
+    /// When true, suppress the platform-native typing indicator (e.g. "ZeroClaw is typing...").
+    #[serde(default)]
+    pub suppress_typing: bool,
 }
 
 /// Discord bot channel configuration.
@@ -2290,6 +2293,9 @@ pub struct DiscordConfig {
     /// Other messages in the guild are silently ignored.
     #[serde(default)]
     pub mention_only: bool,
+    /// When true, suppress the platform-native typing indicator.
+    #[serde(default)]
+    pub suppress_typing: bool,
 }
 
 /// Slack bot channel configuration.
@@ -2304,6 +2310,9 @@ pub struct SlackConfig {
     /// Allowed Slack user IDs. Empty = deny all.
     #[serde(default)]
     pub allowed_users: Vec<String>,
+    /// When true, suppress the platform-native typing indicator.
+    #[serde(default)]
+    pub suppress_typing: bool,
 }
 
 /// Mattermost bot channel configuration.
@@ -2326,6 +2335,9 @@ pub struct MattermostConfig {
     /// Other messages in the channel are silently ignored.
     #[serde(default)]
     pub mention_only: Option<bool>,
+    /// When true, suppress the platform-native typing indicator.
+    #[serde(default)]
+    pub suppress_typing: bool,
 }
 
 /// Webhook channel configuration.
@@ -3263,6 +3275,7 @@ impl Config {
                         draft_update_interval_ms: 1000,
                         interrupt_on_new_message: false,
                         mention_only: false,
+                        suppress_typing: false,
                     });
                 }
             }
@@ -3287,6 +3300,141 @@ impl Config {
                         draft_update_interval_ms: 1000,
                         interrupt_on_new_message: false,
                         mention_only: false,
+                        suppress_typing: false,
+                    });
+                }
+            }
+        }
+
+        // Telegram Suppress Typing: TELEGRAM_SUPPRESS_TYPING
+        if let Ok(val) = std::env::var("TELEGRAM_SUPPRESS_TYPING") {
+            if let Some(telegram) = &mut self.channels_config.telegram {
+                telegram.suppress_typing = val == "1" || val.eq_ignore_ascii_case("true");
+            }
+        }
+
+        // Discord Suppress Typing: DISCORD_SUPPRESS_TYPING
+        if let Ok(val) = std::env::var("DISCORD_SUPPRESS_TYPING") {
+            if let Some(discord) = &mut self.channels_config.discord {
+                discord.suppress_typing = val == "1" || val.eq_ignore_ascii_case("true");
+            }
+        }
+
+        // Slack Suppress Typing: SLACK_SUPPRESS_TYPING
+        if let Ok(val) = std::env::var("SLACK_SUPPRESS_TYPING") {
+            if let Some(slack) = &mut self.channels_config.slack {
+                slack.suppress_typing = val == "1" || val.eq_ignore_ascii_case("true");
+            }
+        }
+
+        // Mattermost Suppress Typing: MATTERMOST_SUPPRESS_TYPING
+        if let Ok(val) = std::env::var("MATTERMOST_SUPPRESS_TYPING") {
+            if let Some(mattermost) = &mut self.channels_config.mattermost {
+                mattermost.suppress_typing = val == "1" || val.eq_ignore_ascii_case("true");
+            }
+        }
+
+        // Browser Enabled: ZEROCLAW_BROWSER_ENABLED
+        if let Ok(val) = std::env::var("ZEROCLAW_BROWSER_ENABLED") {
+            self.browser.enabled = val == "1" || val.eq_ignore_ascii_case("true");
+        }
+
+        // Browser Allowed Domains: ZEROCLAW_BROWSER_ALLOWED_DOMAINS
+        if let Ok(domains) = std::env::var("ZEROCLAW_BROWSER_ALLOWED_DOMAINS") {
+            if !domains.is_empty() {
+                self.browser.allowed_domains = domains
+                    .split(',')
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect();
+            }
+        }
+
+        // Browser Backend: ZEROCLAW_BROWSER_BACKEND
+        if let Ok(val) = std::env::var("ZEROCLAW_BROWSER_BACKEND") {
+            if !val.is_empty() {
+                self.browser.backend = val;
+            }
+        }
+
+        // Browser Native WebDriver URL: ZEROCLAW_BROWSER_NATIVE_WEBDRIVER_URL
+        if let Ok(val) = std::env::var("ZEROCLAW_BROWSER_NATIVE_WEBDRIVER_URL") {
+            if !val.is_empty() {
+                self.browser.native_webdriver_url = val;
+            }
+        }
+
+        // HTTP Request Enabled: ZEROCLAW_HTTP_REQUEST_ENABLED
+        if let Ok(val) = std::env::var("ZEROCLAW_HTTP_REQUEST_ENABLED") {
+            self.http_request.enabled = val == "1" || val.eq_ignore_ascii_case("true");
+        }
+
+        // HTTP Request Allowed Domains: ZEROCLAW_HTTP_REQUEST_ALLOWED_DOMAINS
+        if let Ok(domains) = std::env::var("ZEROCLAW_HTTP_REQUEST_ALLOWED_DOMAINS") {
+            if !domains.is_empty() {
+                self.http_request.allowed_domains = domains
+                    .split(',')
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect();
+            }
+        }
+
+        // Signal HTTP URL: SIGNAL_HTTP_URL
+        if let Ok(url) = std::env::var("SIGNAL_HTTP_URL") {
+            if !url.is_empty() {
+                if let Some(signal) = &mut self.channels_config.signal {
+                    signal.http_url = url;
+                } else {
+                    self.channels_config.signal = Some(SignalConfig {
+                        http_url: url,
+                        account: String::new(),
+                        group_id: None,
+                        allowed_from: Vec::new(),
+                        ignore_attachments: false,
+                        ignore_stories: false,
+                    });
+                }
+            }
+        }
+
+        // Signal Account: SIGNAL_ACCOUNT
+        if let Ok(account) = std::env::var("SIGNAL_ACCOUNT") {
+            if !account.is_empty() {
+                if let Some(signal) = &mut self.channels_config.signal {
+                    signal.account = account;
+                } else {
+                    self.channels_config.signal = Some(SignalConfig {
+                        http_url: String::new(),
+                        account,
+                        group_id: None,
+                        allowed_from: Vec::new(),
+                        ignore_attachments: false,
+                        ignore_stories: false,
+                    });
+                }
+            }
+        }
+
+        // Signal Allowed From: SIGNAL_ALLOWED_FROM
+        if let Ok(from) = std::env::var("SIGNAL_ALLOWED_FROM") {
+            if !from.is_empty() {
+                let parsed_from: Vec<String> = from
+                    .split(',')
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect();
+                    
+                if let Some(signal) = &mut self.channels_config.signal {
+                    signal.allowed_from = parsed_from;
+                } else {
+                    self.channels_config.signal = Some(SignalConfig {
+                        http_url: String::new(),
+                        account: String::new(),
+                        group_id: None,
+                        allowed_from: parsed_from,
+                        ignore_attachments: false,
+                        ignore_stories: false,
                     });
                 }
             }

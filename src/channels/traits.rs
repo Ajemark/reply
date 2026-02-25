@@ -84,8 +84,19 @@ pub trait Channel: Send + Sync {
         Ok(())
     }
 
-    /// Whether this channel supports progressive message updates via draft edits.
+    /// Whether this channel should suppress the platform-native typing indicator.
+    fn is_typing_suppressed(&self) -> bool {
+        false
+    }
+
+    /// Whether this channel supports progressive message updates via draft edits (e.g. streaming chunks).
     fn supports_draft_updates(&self) -> bool {
+        false
+    }
+
+    /// Whether this channel gracefully supports sending an initial status message (e.g., "⏳ Processing...")
+    /// and replacing it with the final response.
+    fn supports_status_updates(&self) -> bool {
         false
     }
 

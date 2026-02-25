@@ -9,7 +9,9 @@
 
 services:
   zeroclaw:
-    build: .
+    build:
+      context: .
+      target: release
     command: daemon
     # image: ghcr.io/zeroclaw-labs/zeroclaw:latest
     container_name: zeroclaw
@@ -35,6 +37,40 @@ services:
       # Telegram Configuration
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
       - TELEGRAM_ALLOWED_USERS=${TELEGRAM_ALLOWED_USERS:-}
+      # Set to 1 to suppress the "typing..." indicator on Telegram
+      - TELEGRAM_SUPPRESS_TYPING=${TELEGRAM_SUPPRESS_TYPING:-0}
+
+      # Discord Configuration
+      # - DISCORD_SUPPRESS_TYPING=${DISCORD_SUPPRESS_TYPING:-0}
+
+      # Slack Configuration
+      # - SLACK_SUPPRESS_TYPING=${SLACK_SUPPRESS_TYPING:-0}
+
+      # Mattermost Configuration
+      # - MATTERMOST_SUPPRESS_TYPING=${MATTERMOST_SUPPRESS_TYPING:-0}
+
+      # Signal Configuration (via signal-cli REST API)
+      - SIGNAL_HTTP_URL=${SIGNAL_HTTP_URL:-}
+      - SIGNAL_ACCOUNT=${SIGNAL_ACCOUNT:-}
+      - SIGNAL_ALLOWED_FROM=${SIGNAL_ALLOWED_FROM:-}
+
+      # Browser Tool Configuration
+      # Set ZEROCLAW_BROWSER_ENABLED=1 to allow the agent to browse the web
+      - ZEROCLAW_BROWSER_ENABLED=${ZEROCLAW_BROWSER_ENABLED:-1}
+      - ZEROCLAW_BROWSER_BACKEND=rust_native
+      - ZEROCLAW_BROWSER_NATIVE_WEBDRIVER_URL=http://browser:4444
+      # Comma-separated list of allowed domains (empty = all allowed)
+      - ZEROCLAW_BROWSER_ALLOWED_DOMAINS=${ZEROCLAW_BROWSER_ALLOWED_DOMAINS:-}
+
+      # HTTP Request Tool Configuration (for APIs and raw HTML scraping)
+      # Set ZEROCLAW_HTTP_REQUEST_ENABLED=1 to allow the agent to make HTTP requests
+      - ZEROCLAW_HTTP_REQUEST_ENABLED=${ZEROCLAW_HTTP_REQUEST_ENABLED:-1}
+      # Comma-separated list of allowed domains, or "*" for all
+      - ZEROCLAW_HTTP_REQUEST_ALLOWED_DOMAINS=${ZEROCLAW_HTTP_REQUEST_ALLOWED_DOMAINS:-\*}
+
+    depends_on:
+      browser:
+        condition: service_healthy
 
     volumes:
       # Persist workspace and config (must match WORKDIR/HOME in Dockerfile)
@@ -62,6 +98,17 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
+
+  browser:
+    image: selenium/standalone-chromium:latest
+    container_name: zeroclaw-browser
+    restart: unless-stopped
+    shm_size: 2gb
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4444/wd/hub/status"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
 volumes:
   zeroclaw-data:

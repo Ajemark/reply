@@ -14,7 +14,7 @@ use crate::providers::{self, ChatMessage, Provider, ProviderCapabilityError};
 use crate::runtime;
 use crate::security::pairing::{constant_time_eq, is_public_bind, PairingGuard};
 use crate::security::SecurityPolicy;
-use crate::tools;
+use crate::tools::{self, Tool, ToolSpec};
 use crate::util::truncate_with_ellipsis;
 use anyhow::{Context, Result};
 use axum::{
@@ -283,6 +283,10 @@ pub struct AppState {
     pub linq_signing_secret: Option<Arc<str>>,
     /// Observability backend for metrics scraping
     pub observer: Arc<dyn crate::observability::Observer>,
+    /// Tool registry for agentic execution
+    pub tools: Arc<Vec<Box<dyn Tool>>>,
+    /// Tool specifications for LLM registration
+    pub tool_specs: Arc<Vec<ToolSpec>>,
 }
 
 /// Run the HTTP gateway using axum with proper HTTP/1.1 compliance.
@@ -343,7 +347,7 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
         (None, None)
     };
 
-    let _tools_registry = Arc::new(tools::all_tools_with_runtime(
+    let tools_registry = Arc::new(tools::all_tools_with_runtime(
         Arc::new(config.clone()),
         &security,
         runtime,
@@ -357,6 +361,7 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
         config.api_key.as_deref(),
         &config,
     ));
+    let tool_specs = Arc::new(tools_registry.iter().map(|t| t.spec()).collect());
     // Extract webhook secret for authentication
     let webhook_secret_hash: Option<Arc<str>> =
         config.channels_config.webhook.as_ref().and_then(|webhook| {
@@ -522,6 +527,8 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
         linq: linq_channel,
         linq_signing_secret,
         observer,
+        tools: tools_registry,
+        tool_specs,
     };
 
     // Build router with middleware
@@ -811,10 +818,16 @@ async fn run_gateway_chat_with_multimodal(
     // workspace-aware system context before model invocation.
     let system_prompt = {
         let config_guard = state.config.lock();
+        let tool_descs: Vec<(&str, &str)> = state
+            .tools
+            .iter()
+            .map(|t| (t.name(), t.description()))
+            .collect();
+
         crate::channels::build_system_prompt(
             &config_guard.workspace_dir,
             &state.model,
-            &[], // tools - empty for simple chat
+            &tool_descs,
             &[], // skills
             Some(&config_guard.identity),
             None, // bootstrap_max_chars - use default
@@ -831,8 +844,16 @@ async fn run_gateway_chat_with_multimodal(
 
     state
         .provider
-        .chat_with_history(&prepared.messages, &state.model, state.temperature)
+        .chat(
+            crate::providers::ChatRequest {
+                messages: &prepared.messages,
+                tools: Some(&state.tool_specs),
+            },
+            &state.model,
+            state.temperature,
+        )
         .await
+        .map(|resp| resp.text_or_empty().to_string())
 }
 
 /// Webhook request body

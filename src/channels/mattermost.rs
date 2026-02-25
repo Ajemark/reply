@@ -15,6 +15,8 @@ pub struct MattermostChannel {
     thread_replies: bool,
     /// When true, only respond to messages that @-mention the bot.
     mention_only: bool,
+    /// When true, suppress the platform-native typing indicator.
+    suppress_typing: bool,
     /// Handle for the background typing-indicator loop (aborted on stop_typing).
     typing_handle: Mutex<Option<tokio::task::JoinHandle<()>>>,
 }
@@ -27,6 +29,7 @@ impl MattermostChannel {
         allowed_users: Vec<String>,
         thread_replies: bool,
         mention_only: bool,
+        suppress_typing: bool,
     ) -> Self {
         // Ensure base_url doesn't have a trailing slash for consistent path joining
         let base_url = base_url.trim_end_matches('/').to_string();
@@ -37,6 +40,7 @@ impl MattermostChannel {
             allowed_users,
             thread_replies,
             mention_only,
+            suppress_typing,
             typing_handle: Mutex::new(None),
         }
     }
@@ -89,6 +93,10 @@ impl Channel for MattermostChannel {
         "mattermost"
     }
 
+    fn is_typing_suppressed(&self) -> bool {
+        self.suppress_typing
+    }
+
     async fn send(&self, message: &SendMessage) -> Result<()> {
         // Mattermost supports threading via 'root_id'.
         // We pack 'channel_id:root_id' into recipient if it's a thread.
@@ -125,6 +133,104 @@ impl Channel for MattermostChannel {
                 .await
                 .unwrap_or_else(|e| format!("<failed to read response: {e}>"));
             bail!("Mattermost post failed ({status}): {body}");
+        }
+
+        Ok(())
+    }
+
+    fn supports_status_updates(&self) -> bool {
+        true
+    }
+
+    async fn send_draft(&self, message: &SendMessage) -> Result<Option<String>> {
+        let (channel_id, root_id) = if let Some((c, r)) = message.recipient.split_once(':') {
+            (c, Some(r))
+        } else {
+            (message.recipient.as_str(), None)
+        };
+
+        let mut body_map = serde_json::json!({
+            "channel_id": channel_id,
+            "message": message.content
+        });
+
+        if let Some(root) = root_id {
+            body_map.as_object_mut().unwrap().insert(
+                "root_id".to_string(),
+                serde_json::Value::String(root.to_string()),
+            );
+        }
+
+        let resp = self
+            .http_client()
+            .post(format!("{}/api/v4/posts", self.base_url))
+            .bearer_auth(&self.bot_token)
+            .json(&body_map)
+            .send()
+            .await?;
+
+        let status = resp.status();
+        let body_str = resp
+            .text()
+            .await
+            .unwrap_or_else(|e| format!("<failed to read response: {e}>"));
+
+        if !status.is_success() {
+            bail!("Mattermost send_draft failed ({status}): {body_str}");
+        }
+
+        let parsed: serde_json::Value = serde_json::from_str(&body_str).unwrap_or_default();
+        Ok(parsed.get("id").and_then(|id| id.as_str()).map(|s| s.to_string()))
+    }
+
+    async fn finalize_draft(
+        &self,
+        recipient: &str,
+        message_id: &str,
+        text: &str,
+    ) -> Result<()> {
+        let body = serde_json::json!({
+            "id": message_id,
+            "message": text
+        });
+
+        let resp = self
+            .http_client()
+            .put(format!("{}/api/v4/posts/{}", self.base_url, message_id))
+            .bearer_auth(&self.bot_token)
+            .json(&body)
+            .send()
+            .await?;
+
+        let status = resp.status();
+        if !status.is_success() {
+            let body_str = resp
+                .text()
+                .await
+                .unwrap_or_else(|e| format!("<failed to read response: {e}>"));
+            tracing::warn!("Mattermost finalize_draft failed ({status}): {body_str}");
+            // Fallback to sending as new message
+            return self.send(&SendMessage::new(text, recipient)).await;
+        }
+
+        Ok(())
+    }
+
+    async fn cancel_draft(&self, _recipient: &str, message_id: &str) -> Result<()> {
+        let resp = self
+            .http_client()
+            .delete(format!("{}/api/v4/posts/{}", self.base_url, message_id))
+            .bearer_auth(&self.bot_token)
+            .send()
+            .await?;
+
+        if !resp.status().is_success() && resp.status().as_u16() != 404 {
+            let status = resp.status();
+            let body_str = resp
+                .text()
+                .await
+                .unwrap_or_else(|e| format!("<failed to read response: {e}>"));
+            tracing::debug!("Mattermost cancel_draft failed ({status}): {body_str}");
         }
 
         Ok(())
@@ -462,6 +568,7 @@ mod tests {
             allowed,
             thread_replies,
             false,
+            false,
         )
     }
 
@@ -474,6 +581,7 @@ mod tests {
             vec!["*".into()],
             true,
             true,
+            false,
         )
     }
 
@@ -484,6 +592,7 @@ mod tests {
             "token".into(),
             None,
             vec![],
+            false,
             false,
             false,
         );

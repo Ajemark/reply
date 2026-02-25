@@ -16,7 +16,7 @@ RUN mkdir -p src benches crates/robot-kit/src \
     && echo "fn main() {}" > src/main.rs \
     && echo "fn main() {}" > benches/agent_benchmarks.rs \
     && echo "pub fn placeholder() {}" > crates/robot-kit/src/lib.rs
-RUN cargo build --release --locked
+RUN cargo build --release --locked --features browser-native
 RUN rm -rf src benches crates/robot-kit/src
 
 # 2. Copy only build-relevant source paths (avoid cache-busting on docs/tests/scripts)
@@ -24,7 +24,7 @@ COPY src/ src/
 COPY benches/ benches/
 COPY crates/ crates/
 COPY firmware/ firmware/
-RUN cargo build --release --locked && \
+RUN cargo build --release --locked --features browser-native && \
     cp target/release/zeroclaw /app/zeroclaw && \
     strip /app/zeroclaw
 

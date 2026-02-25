@@ -1166,6 +1166,10 @@ async fn process_channel_message(
         .as_ref()
         .is_some_and(|ch| ch.supports_draft_updates());
 
+    let use_status = target_channel
+        .as_ref()
+        .is_some_and(|ch| !ch.supports_draft_updates() && ch.supports_status_updates() && ch.is_typing_suppressed());
+
     let (delta_tx, delta_rx) = if use_streaming {
         let (tx, rx) = tokio::sync::mpsc::channel::<String>(64);
         (Some(tx), Some(rx))
@@ -1173,11 +1177,16 @@ async fn process_channel_message(
         (None, None)
     };
 
-    let draft_message_id = if use_streaming {
+    let draft_message_id = if use_streaming || use_status {
         if let Some(channel) = target_channel.as_ref() {
+            let initial_text = if use_status {
+                "⏳ Processing your request..."
+            } else {
+                "..."
+            };
             match channel
                 .send_draft(
-                    &SendMessage::new("...", &msg.reply_target).in_thread(msg.thread_ts.clone()),
+                    &SendMessage::new(initial_text, &msg.reply_target).in_thread(msg.thread_ts.clone()),
                 )
                 .await
             {
@@ -1219,14 +1228,18 @@ async fn process_channel_message(
     };
 
     let typing_cancellation = target_channel.as_ref().map(|_| CancellationToken::new());
-    let typing_task = match (target_channel.as_ref(), typing_cancellation.as_ref()) {
-        (Some(channel), Some(token)) => Some(spawn_scoped_typing_task(
-            Arc::clone(channel),
-            msg.reply_target.clone(),
-            token.clone(),
-        )),
-        _ => None,
-    };
+    let mut typing_task = None;
+    if let Some(channel) = target_channel.clone() {
+        if !channel.is_typing_suppressed() {
+            if let Some(token) = typing_cancellation.clone() {
+                typing_task = Some(spawn_scoped_typing_task(
+                    channel,
+                    msg.reply_target.clone(),
+                    token,
+                ));
+            }
+        }
+    }
 
     // Record history length before tool loop so we can extract tool context after.
     let history_len_before_tools = history.len();
@@ -1987,6 +2000,7 @@ pub async fn doctor_channels(config: Config) -> Result<()> {
                     tg.bot_token.clone(),
                     tg.allowed_users.clone(),
                     tg.mention_only,
+                    tg.suppress_typing,
                 )
                 .with_streaming(tg.stream_mode, tg.draft_update_interval_ms),
             ),
@@ -2002,6 +2016,7 @@ pub async fn doctor_channels(config: Config) -> Result<()> {
                 dc.allowed_users.clone(),
                 dc.listen_to_bots,
                 dc.mention_only,
+                dc.suppress_typing,
             )),
         ));
     }
@@ -2013,6 +2028,7 @@ pub async fn doctor_channels(config: Config) -> Result<()> {
                 sl.bot_token.clone(),
                 sl.channel_id.clone(),
                 sl.allowed_users.clone(),
+                sl.suppress_typing,
             )),
         ));
     }
@@ -2317,10 +2333,30 @@ pub async fn start_channels(config: Config) -> Result<()> {
 
     if config.browser.enabled {
         tool_descs.push((
-            "browser_open",
-            "Open approved HTTPS URLs in Brave Browser (allowlist-only, no scraping)",
+            "browser",
+            "Perform full browser automation (open, click, type, scrape). Use when: complex interaction or data extraction from dynamic sites is required.",
         ));
     }
+    if config.http_request.enabled {
+        tool_descs.push((
+            "http_request",
+            "Make direct HTTP requests (GET, POST, etc.). Use when: interacting with REST APIs or fetching static content without browser overhead.",
+        ));
+    }
+    if config.web_search.enabled {
+        tool_descs.push((
+            "web_search",
+            "Search the real-world web for information. Use when: you need up-to-date facts, documentation, or news that isn't in your knowledge base.",
+        ));
+    }
+    tool_descs.push((
+        "image_info",
+        "Analyze image content and metadata. Use when: extracts text (OCR), identifying objects, or describing visual elements in provided images.",
+    ));
+    tool_descs.push((
+        "screenshot",
+        "Capture a screenshot of the host system. Use when: diagnostics, verifying UI state, or providing visual proof of a local state.",
+    ));
     if config.composio.enabled {
         tool_descs.push((
             "composio",
@@ -2381,6 +2417,7 @@ pub async fn start_channels(config: Config) -> Result<()> {
                 tg.bot_token.clone(),
                 tg.allowed_users.clone(),
                 tg.mention_only,
+                tg.suppress_typing,
             )
             .with_streaming(tg.stream_mode, tg.draft_update_interval_ms),
         ));
@@ -2393,6 +2430,7 @@ pub async fn start_channels(config: Config) -> Result<()> {
             dc.allowed_users.clone(),
             dc.listen_to_bots,
             dc.mention_only,
+            dc.suppress_typing,
         )));
     }
 
@@ -2401,6 +2439,7 @@ pub async fn start_channels(config: Config) -> Result<()> {
             sl.bot_token.clone(),
             sl.channel_id.clone(),
             sl.allowed_users.clone(),
+            sl.suppress_typing,
         )));
     }
 
@@ -2412,6 +2451,7 @@ pub async fn start_channels(config: Config) -> Result<()> {
             mm.allowed_users.clone(),
             mm.thread_replies.unwrap_or(true),
             mm.mention_only.unwrap_or(false),
+            mm.suppress_typing,
         )));
     }
 
