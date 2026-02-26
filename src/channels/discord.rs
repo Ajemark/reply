@@ -686,6 +686,7 @@ mod tests {
             vec!["111".into(), "*".into()],
             false,
             false,
+            false,
         );
         assert!(ch.is_user_allowed("111"));
         assert!(ch.is_user_allowed("anyone_else"));

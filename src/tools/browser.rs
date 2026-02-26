@@ -197,6 +197,22 @@ pub enum BrowserAction {
     },
 }
 
+impl BrowserAction {
+    pub fn is_major_action(&self) -> bool {
+        matches!(
+            self,
+            BrowserAction::Open { .. }
+                | BrowserAction::Click { .. }
+                | BrowserAction::Fill { .. }
+                | BrowserAction::Type { .. }
+                | BrowserAction::Press { .. }
+                | BrowserAction::Hover { .. }
+                | BrowserAction::Scroll { .. }
+                | BrowserAction::Find { .. }
+        )
+    }
+}
+
 impl BrowserTool {
     pub fn new(
         security: Arc<SecurityPolicy>,
@@ -496,11 +512,10 @@ impl BrowserTool {
         &self,
         action: BrowserAction,
     ) -> anyhow::Result<ToolResult> {
-        match action {
+        let mut resp = match &action {
             BrowserAction::Open { url } => {
-                self.validate_url(&url)?;
-                let resp = self.run_command(&["open", &url]).await?;
-                self.to_result(resp)
+                self.validate_url(url)?;
+                self.run_command(&["open", url]).await?
             }
 
             BrowserAction::Snapshot {
@@ -509,10 +524,10 @@ impl BrowserTool {
                 depth,
             } => {
                 let mut args = vec!["snapshot"];
-                if interactive_only {
+                if *interactive_only {
                     args.push("-i");
                 }
-                if compact {
+                if *compact {
                     args.push("-c");
                 }
                 let depth_str;
@@ -521,50 +536,34 @@ impl BrowserTool {
                     depth_str = d.to_string();
                     args.push(&depth_str);
                 }
-                let resp = self.run_command(&args).await?;
-                self.to_result(resp)
+                self.run_command(&args).await?
             }
 
-            BrowserAction::Click { selector } => {
-                let resp = self.run_command(&["click", &selector]).await?;
-                self.to_result(resp)
-            }
+            BrowserAction::Click { selector } => self.run_command(&["click", selector]).await?,
 
             BrowserAction::Fill { selector, value } => {
-                let resp = self.run_command(&["fill", &selector, &value]).await?;
-                self.to_result(resp)
+                self.run_command(&["fill", selector, value]).await?
             }
 
             BrowserAction::Type { selector, text } => {
-                let resp = self.run_command(&["type", &selector, &text]).await?;
-                self.to_result(resp)
+                self.run_command(&["type", selector, text]).await?
             }
 
-            BrowserAction::GetText { selector } => {
-                let resp = self.run_command(&["get", "text", &selector]).await?;
-                self.to_result(resp)
-            }
+            BrowserAction::GetText { selector } => self.run_command(&["get", "text", selector]).await?,
 
-            BrowserAction::GetTitle => {
-                let resp = self.run_command(&["get", "title"]).await?;
-                self.to_result(resp)
-            }
+            BrowserAction::GetTitle => self.run_command(&["get", "title"]).await?,
 
-            BrowserAction::GetUrl => {
-                let resp = self.run_command(&["get", "url"]).await?;
-                self.to_result(resp)
-            }
+            BrowserAction::GetUrl => self.run_command(&["get", "url"]).await?,
 
             BrowserAction::Screenshot { path, full_page } => {
                 let mut args = vec!["screenshot"];
                 if let Some(ref p) = path {
                     args.push(p);
                 }
-                if full_page {
+                if *full_page {
                     args.push("--full");
                 }
-                let resp = self.run_command(&args).await?;
-                self.to_result(resp)
+                self.run_command(&args).await?
             }
 
             BrowserAction::Wait { selector, ms, text } => {
@@ -579,55 +578,61 @@ impl BrowserTool {
                     args.push("--text");
                     args.push(t);
                 }
-                let resp = self.run_command(&args).await?;
-                self.to_result(resp)
+                self.run_command(&args).await?
             }
 
-            BrowserAction::Press { key } => {
-                let resp = self.run_command(&["press", &key]).await?;
-                self.to_result(resp)
-            }
+            BrowserAction::Press { key } => self.run_command(&["press", key]).await?,
 
-            BrowserAction::Hover { selector } => {
-                let resp = self.run_command(&["hover", &selector]).await?;
-                self.to_result(resp)
-            }
+            BrowserAction::Hover { selector } => self.run_command(&["hover", selector]).await?,
 
             BrowserAction::Scroll { direction, pixels } => {
-                let mut args = vec!["scroll", &direction];
+                let mut args = vec!["scroll", direction];
                 let px_str;
                 if let Some(px) = pixels {
                     px_str = px.to_string();
                     args.push(&px_str);
                 }
-                let resp = self.run_command(&args).await?;
-                self.to_result(resp)
+                self.run_command(&args).await?
             }
 
             BrowserAction::IsVisible { selector } => {
-                let resp = self.run_command(&["is", "visible", &selector]).await?;
-                self.to_result(resp)
+                self.run_command(&["is", "visible", selector]).await?
             }
 
-            BrowserAction::Close => {
-                let resp = self.run_command(&["close"]).await?;
-                self.to_result(resp)
-            }
+            BrowserAction::Close => self.run_command(&["close"]).await?,
 
             BrowserAction::Find {
                 by,
                 value,
-                action,
+                action: find_action,
                 fill_value,
             } => {
-                let mut args = vec!["find", &by, &value, &action];
+                let mut args = vec!["find", by, value, find_action];
                 if let Some(ref fv) = fill_value {
                     args.push(fv);
                 }
-                let resp = self.run_command(&args).await?;
-                self.to_result(resp)
+                self.run_command(&args).await?
+            }
+        };
+
+        // Post-action auto-screenshot for major actions
+        if resp.success && action.is_major_action() {
+            let screenshot_path = self.security.workspace_dir.join("browser_snapshot.png");
+            let path_str = screenshot_path.to_string_lossy().to_string();
+            if let Ok(shot_resp) = self.run_command(&["screenshot", &path_str]).await {
+                if shot_resp.success {
+                    if let Some(data) = resp.data.as_mut() {
+                        if let Some(obj) = data.as_object_mut() {
+                            obj.insert("screenshot_path".to_string(), json!(path_str));
+                        }
+                    } else {
+                        resp.data = Some(json!({"screenshot_path": path_str}));
+                    }
+                }
             }
         }
+
+        self.to_result(resp)
     }
 
     #[allow(clippy::unused_async)]
@@ -639,12 +644,20 @@ impl BrowserTool {
         {
             let mut state = self.native_state.lock().await;
 
+            let screenshot_path = self.security.workspace_dir.join("browser_snapshot.png");
+            let auto_screenshot = if action.is_major_action() {
+                Some(screenshot_path.as_path())
+            } else {
+                None
+            };
+
             let output = state
                 .execute_action(
                     action,
                     self.native_headless,
                     &self.native_webdriver_url,
                     self.native_chrome_path.as_deref(),
+                    auto_screenshot,
                 )
                 .await?;
 
@@ -1105,8 +1118,9 @@ mod native_backend {
             headless: bool,
             webdriver_url: &str,
             chrome_path: Option<&str>,
+            auto_screenshot_path: Option<&std::path::Path>,
         ) -> Result<Value> {
-            match action {
+            let mut result: serde_json::Value = match action {
                 BrowserAction::Open { url } => {
                     self.ensure_session(headless, webdriver_url, chrome_path)
                         .await?;
@@ -1120,11 +1134,11 @@ mod native_backend {
                         .await
                         .context("Failed to read current URL after navigation")?;
 
-                    Ok(json!({
+                    json!({
                         "backend": "rust_native",
                         "action": "open",
                         "url": current_url.as_str(),
-                    }))
+                    })
                 }
                 BrowserAction::Snapshot {
                     interactive_only,
@@ -1140,21 +1154,21 @@ mod native_backend {
                         .await
                         .context("Failed to evaluate snapshot script")?;
 
-                    Ok(json!({
+                    json!({
                         "backend": "rust_native",
                         "action": "snapshot",
                         "data": snapshot,
-                    }))
+                    })
                 }
                 BrowserAction::Click { selector } => {
                     let client = self.active_client()?;
                     find_element(client, &selector).await?.click().await?;
 
-                    Ok(json!({
+                    json!({
                         "backend": "rust_native",
                         "action": "click",
                         "selector": selector,
-                    }))
+                    })
                 }
                 BrowserAction::Fill { selector, value } => {
                     let client = self.active_client()?;
@@ -1162,11 +1176,11 @@ mod native_backend {
                     let _ = element.clear().await;
                     element.send_keys(&value).await?;
 
-                    Ok(json!({
+                    json!({
                         "backend": "rust_native",
                         "action": "fill",
                         "selector": selector,
-                    }))
+                    })
                 }
                 BrowserAction::Type { selector, text } => {
                     let client = self.active_client()?;
@@ -1175,33 +1189,33 @@ mod native_backend {
                         .send_keys(&text)
                         .await?;
 
-                    Ok(json!({
+                    json!({
                         "backend": "rust_native",
                         "action": "type",
                         "selector": selector,
                         "typed": text.len(),
-                    }))
+                    })
                 }
                 BrowserAction::GetText { selector } => {
                     let client = self.active_client()?;
                     let text = find_element(client, &selector).await?.text().await?;
 
-                    Ok(json!({
+                    json!({
                         "backend": "rust_native",
                         "action": "get_text",
                         "selector": selector,
                         "text": text,
-                    }))
+                    })
                 }
                 BrowserAction::GetTitle => {
                     let client = self.active_client()?;
                     let title = client.title().await.context("Failed to read page title")?;
 
-                    Ok(json!({
+                    json!({
                         "backend": "rust_native",
                         "action": "get_title",
                         "title": title,
-                    }))
+                    })
                 }
                 BrowserAction::GetUrl => {
                     let client = self.active_client()?;
@@ -1210,11 +1224,11 @@ mod native_backend {
                         .await
                         .context("Failed to read current URL")?;
 
-                    Ok(json!({
+                    json!({
                         "backend": "rust_native",
                         "action": "get_url",
                         "url": url.as_str(),
-                    }))
+                    })
                 }
                 BrowserAction::Screenshot { path, full_page } => {
                     let client = self.active_client()?;
@@ -1239,24 +1253,24 @@ mod native_backend {
                             Value::String(base64::engine::general_purpose::STANDARD.encode(&png));
                     }
 
-                    Ok(payload)
+                    payload
                 }
                 BrowserAction::Wait { selector, ms, text } => {
                     let client = self.active_client()?;
                     if let Some(sel) = selector.as_ref() {
                         wait_for_selector(client, sel).await?;
-                        Ok(json!({
+                        json!({
                             "backend": "rust_native",
                             "action": "wait",
                             "selector": sel,
-                        }))
+                        })
                     } else if let Some(duration_ms) = ms {
                         tokio::time::sleep(Duration::from_millis(duration_ms)).await;
-                        Ok(json!({
+                        json!({
                             "backend": "rust_native",
                             "action": "wait",
                             "ms": duration_ms,
-                        }))
+                        })
                     } else if let Some(needle) = text.as_ref() {
                         let xpath = xpath_contains_text(needle);
                         client
@@ -1266,18 +1280,18 @@ mod native_backend {
                             .with_context(|| {
                                 format!("Timed out waiting for text to appear: {needle}")
                             })?;
-                        Ok(json!({
+                        json!({
                             "backend": "rust_native",
                             "action": "wait",
                             "text": needle,
-                        }))
+                        })
                     } else {
                         tokio::time::sleep(Duration::from_millis(250)).await;
-                        Ok(json!({
+                        json!({
                             "backend": "rust_native",
                             "action": "wait",
                             "ms": 250,
-                        }))
+                        })
                     }
                 }
                 BrowserAction::Press { key } => {
@@ -1295,22 +1309,22 @@ mod native_backend {
                         }
                     }
 
-                    Ok(json!({
+                    json!({
                         "backend": "rust_native",
                         "action": "press",
                         "key": key,
-                    }))
+                    })
                 }
                 BrowserAction::Hover { selector } => {
                     let client = self.active_client()?;
                     let element = find_element(client, &selector).await?;
                     hover_element(client, &element).await?;
 
-                    Ok(json!({
+                    json!({
                         "backend": "rust_native",
                         "action": "hover",
                         "selector": selector,
-                    }))
+                    })
                 }
                 BrowserAction::Scroll { direction, pixels } => {
                     let client = self.active_client()?;
@@ -1333,11 +1347,11 @@ mod native_backend {
                         .await
                         .context("Failed to execute scroll script")?;
 
-                    Ok(json!({
+                    json!({
                         "backend": "rust_native",
                         "action": "scroll",
                         "position": position,
-                    }))
+                    })
                 }
                 BrowserAction::IsVisible { selector } => {
                     let client = self.active_client()?;
@@ -1346,23 +1360,23 @@ mod native_backend {
                         .is_displayed()
                         .await?;
 
-                    Ok(json!({
+                    json!({
                         "backend": "rust_native",
                         "action": "is_visible",
                         "selector": selector,
                         "visible": visible,
-                    }))
+                    })
                 }
                 BrowserAction::Close => {
                     if let Some(client) = self.client.take() {
                         let _ = client.close().await;
                     }
 
-                    Ok(json!({
+                    json!({
                         "backend": "rust_native",
                         "action": "close",
                         "closed": true,
-                    }))
+                    })
                 }
                 BrowserAction::Find {
                     by,
@@ -1374,7 +1388,7 @@ mod native_backend {
                     let selector = selector_for_find(&by, &value);
                     let element = find_element(client, &selector).await?;
 
-                    let payload = match action.as_str() {
+                    let mut payload = match action.as_str() {
                         "click" => {
                             element.click().await?;
                             json!({"result": "clicked"})
@@ -1400,28 +1414,43 @@ mod native_backend {
                             if !checked_before {
                                 element.click().await?;
                             }
-                            let checked_after = element_checked(&element).await?;
-                            json!({
-                                "result": "checked",
-                                "checked_before": checked_before,
-                                "checked_after": checked_after,
-                            })
+                            json!({"result": "checked", "was_checked": checked_before})
                         }
                         _ => anyhow::bail!(
                             "Unsupported find_action '{action}'. Use click/fill/text/hover/check"
                         ),
                     };
 
-                    Ok(json!({
+                    json!({
                         "backend": "rust_native",
                         "action": "find",
                         "by": by,
                         "value": value,
                         "selector": selector,
                         "data": payload,
-                    }))
+                    })
+                }
+            };
+
+            // Post-action auto-screenshot if requested
+            if let Some(path) = auto_screenshot_path {
+                if let Ok(screenshot_path) = self.auto_screenshot(path).await {
+                    if let Some(obj) = result.as_object_mut() {
+                        obj.insert("screenshot_path".to_string(), json!(screenshot_path));
+                    }
                 }
             }
+
+            Ok(result)
+        }
+
+        async fn auto_screenshot(&self, path: &std::path::Path) -> Result<String> {
+            let client = self.active_client()?;
+            let png = client.screenshot().await.context("Auto-screenshot failed")?;
+            tokio::fs::write(path, &png)
+                .await
+                .context("Failed to write auto-screenshot")?;
+            Ok(path.to_string_lossy().to_string())
         }
 
         async fn ensure_session(

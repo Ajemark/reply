@@ -1400,6 +1400,8 @@ mod tests {
             linq: None,
             linq_signing_secret: None,
             observer: Arc::new(crate::observability::NoopObserver),
+            tools: Arc::new(Vec::new()),
+            tool_specs: Arc::new(Vec::new()),
         };
 
         let response = handle_metrics(State(state)).await.into_response();
@@ -1443,6 +1445,8 @@ mod tests {
             linq: None,
             linq_signing_secret: None,
             observer,
+            tools: Arc::new(Vec::new()),
+            tool_specs: Arc::new(Vec::new()),
         };
 
         let response = handle_metrics(State(state)).await.into_response();
@@ -1803,6 +1807,8 @@ mod tests {
             linq: None,
             linq_signing_secret: None,
             observer: Arc::new(crate::observability::NoopObserver),
+            tools: Arc::new(Vec::new()),
+            tool_specs: Arc::new(Vec::new()),
         };
 
         let mut headers = HeaderMap::new();
@@ -1861,6 +1867,8 @@ mod tests {
             linq: None,
             linq_signing_secret: None,
             observer: Arc::new(crate::observability::NoopObserver),
+            tools: Arc::new(Vec::new()),
+            tool_specs: Arc::new(Vec::new()),
         };
 
         let headers = HeaderMap::new();
@@ -1931,6 +1939,8 @@ mod tests {
             linq: None,
             linq_signing_secret: None,
             observer: Arc::new(crate::observability::NoopObserver),
+            tools: Arc::new(Vec::new()),
+            tool_specs: Arc::new(Vec::new()),
         };
 
         let response = handle_webhook(
@@ -1973,6 +1983,8 @@ mod tests {
             linq: None,
             linq_signing_secret: None,
             observer: Arc::new(crate::observability::NoopObserver),
+            tools: Arc::new(Vec::new()),
+            tool_specs: Arc::new(Vec::new()),
         };
 
         let mut headers = HeaderMap::new();
@@ -2020,6 +2032,8 @@ mod tests {
             linq: None,
             linq_signing_secret: None,
             observer: Arc::new(crate::observability::NoopObserver),
+            tools: Arc::new(Vec::new()),
+            tool_specs: Arc::new(Vec::new()),
         };
 
         let mut headers = HeaderMap::new();

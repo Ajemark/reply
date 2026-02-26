@@ -252,7 +252,12 @@ fn interruption_scope_key(msg: &traits::ChannelMessage) -> String {
 fn channel_delivery_instructions(channel_name: &str) -> Option<&'static str> {
     match channel_name {
         "telegram" => Some(
-            "When responding on Telegram, include media markers for files or URLs that should be sent as attachments. Use one marker per attachment with this exact syntax: [IMAGE:<path-or-url>], [DOCUMENT:<path-or-url>], [VIDEO:<path-or-url>], [AUDIO:<path-or-url>], or [VOICE:<path-or-url>]. Keep normal user-facing text outside markers and never wrap markers in code fences.",
+            "When responding on Telegram, include media markers for files or URLs that should be sent as attachments. \
+             Use one marker per attachment with this exact syntax: [IMAGE:<path-or-url>], [DOCUMENT:<path-or-url>], [VIDEO:<path-or-url>], [AUDIO:<path-or-url>], or [VOICE:<path-or-url>]. \
+             Keep normal user-facing text outside markers and never wrap markers in code fences.\n\n\
+             IMPORTANT: When using the browser tool, always look for 'screenshot_path' in the tool results. \
+             If present, include [IMAGE:<screenshot_path>] in your response so the user can see the page. \
+             NEVER use [IMAGE:https://...] for a website URL; only use it for direct links to image files (e.g., .png, .jpg)."
         ),
         _ => None,
     }

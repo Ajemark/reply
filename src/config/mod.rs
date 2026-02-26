@@ -38,6 +38,7 @@ mod tests {
             draft_update_interval_ms: 1000,
             interrupt_on_new_message: false,
             mention_only: false,
+            suppress_typing: false,
         };
 
         let discord = DiscordConfig {
@@ -46,6 +47,7 @@ mod tests {
             allowed_users: vec![],
             listen_to_bots: false,
             mention_only: false,
+            suppress_typing: false,
         };
 
         let lark = LarkConfig {

@@ -734,6 +734,42 @@ fn parse_tool_calls(response: &str) -> (String, Vec<ParsedToolCall>) {
         }
     }
 
+    // Kimi-Code Hallucination fallback
+    // Sometimes Kimi-Code bypasses both native tool calling and XML tags
+    // and outputs a string like: `[BROWSER_TOOL_CALL] browser({"action": ...})`
+    if calls.is_empty() {
+        static HALLUCINATED_TOOL_CALL_RE: LazyLock<Regex> = LazyLock::new(|| {
+            Regex::new(r"(?is)\[([A-Z0-9_]+_TOOL_CALL|tool[_-]?call)\]\s*([a-zA-Z0-9_]+)\s*\(\s*(\{.*?\})\s*\)").unwrap()
+        });
+        
+        let mut text_acc = remaining.to_string();
+        for cap in HALLUCINATED_TOOL_CALL_RE.captures_iter(remaining) {
+            let full_match = cap.get(0).unwrap();
+            let name = cap.get(2).unwrap().as_str().to_string();
+            let args_json = cap.get(3).unwrap().as_str();
+            
+            if let Ok(value) = serde_json::from_str::<serde_json::Value>(args_json) {
+                calls.push(ParsedToolCall {
+                    name,
+                    arguments: value,
+                });
+                text_acc = text_acc.replace(full_match.as_str(), "");
+            }
+        }
+        
+        if !calls.is_empty() {
+            let mut cleaned_parts = Vec::new();
+            if !text_parts.is_empty() {
+                cleaned_parts.push(text_parts.join("\n"));
+            }
+            if !text_acc.trim().is_empty() {
+                cleaned_parts.push(text_acc.trim().to_string());
+            }
+            text_parts = if cleaned_parts.is_empty() { Vec::new() } else { vec![cleaned_parts.join("\n")] };
+            remaining = "";
+        }
+    }
+
     // GLM-style tool calls (browser_open/url>https://..., shell/command>ls, etc.)
     if calls.is_empty() {
         let glm_calls = parse_glm_style_tool_calls(remaining);
@@ -2609,6 +2645,16 @@ Done."#;
         let result = parse_tool_call_value(&value);
         assert!(result.is_some());
         assert_eq!(result.unwrap().name, "test");
+    }
+
+    #[test]
+    fn parse_tool_calls_handles_hallucinated_brackets() {
+        let response = r#"I'm on it! Let me actually execute the browsing now and collect the data systematically. Starting the exploration... 🚀 [BROWSER_TOOL_CALL] browser({"action": "navigate", "url": "https://www.reply.cash"})"#;
+        let (text, calls) = parse_tool_calls(response);
+        assert!(text.contains("Starting the exploration"));
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].name, "browser");
+        assert_eq!(serde_json::to_string(&calls[0].arguments).unwrap(), r#"{"action":"navigate","url":"https://www.reply.cash"}"#);
     }
 
     // ═══════════════════════════════════════════════════════════════════════

@@ -324,6 +324,7 @@ mod tests {
             draft_update_interval_ms: 1000,
             interrupt_on_new_message: false,
             mention_only: false,
+            suppress_typing: false,
         });
         assert!(has_supervised_channels(&config));
     }
@@ -349,6 +350,7 @@ mod tests {
             allowed_users: vec!["*".into()],
             thread_replies: Some(true),
             mention_only: Some(false),
+            suppress_typing: false,
         });
         assert!(has_supervised_channels(&config));
     }
