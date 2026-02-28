@@ -648,14 +648,16 @@ impl Tool for ComposioTool {
                         );
                         Ok(ToolResult {
                             success: true,
-                            output,
+                screenshot_path: None,                            output,
                             error: None,
+                
                         })
                     }
                     Err(e) => Ok(ToolResult {
                         success: false,
-                        output: String::new(),
+                output: String::new(),
                         error: Some(format!("Failed to list actions: {e}")),
+                screenshot_path: None,
                     }),
                 }
             }
@@ -671,10 +673,11 @@ impl Tool for ComposioTool {
                                 .unwrap_or_default();
                             return Ok(ToolResult {
                                 success: true,
-                                output: format!(
+                output: format!(
                                     "No connected accounts found{app_hint} for entity '{entity_id}'. Run action='connect' first."
                                 ),
                                 error: None,
+                screenshot_path: None,
                             });
                         }
 
@@ -698,14 +701,16 @@ impl Tool for ComposioTool {
                         );
                         Ok(ToolResult {
                             success: true,
-                            output,
+                screenshot_path: None,                            output,
                             error: None,
+                
                         })
                     }
                     Err(e) => Ok(ToolResult {
                         success: false,
-                        output: String::new(),
+                output: String::new(),
                         error: Some(format!("Failed to list connected accounts: {e}")),
+                screenshot_path: None,
                     }),
                 }
             }
@@ -717,8 +722,9 @@ impl Tool for ComposioTool {
                 {
                     return Ok(ToolResult {
                         success: false,
-                        output: String::new(),
+                output: String::new(),
                         error: Some(error),
+                screenshot_path: None,
                     });
                 }
 
@@ -743,14 +749,16 @@ impl Tool for ComposioTool {
                             .unwrap_or_else(|_| format!("{result:?}"));
                         Ok(ToolResult {
                             success: true,
-                            output,
+                screenshot_path: None,                            output,
                             error: None,
+                
                         })
                     }
                     Err(e) => Ok(ToolResult {
                         success: false,
-                        output: String::new(),
+                output: String::new(),
                         error: Some(format!("Action execution failed: {e}")),
+                screenshot_path: None,
                     }),
                 }
             }
@@ -762,8 +770,9 @@ impl Tool for ComposioTool {
                 {
                     return Ok(ToolResult {
                         success: false,
-                        output: String::new(),
+                output: String::new(),
                         error: Some(error),
+                screenshot_path: None,
                     });
                 }
 
@@ -795,14 +804,16 @@ impl Tool for ComposioTool {
                         }
                         Ok(ToolResult {
                             success: true,
-                            output,
+                screenshot_path: None,                            output,
                             error: None,
+                
                         })
                     }
                     Err(e) => Ok(ToolResult {
                         success: false,
-                        output: String::new(),
+                output: String::new(),
                         error: Some(format!("Failed to get connection URL: {e}")),
+                screenshot_path: None,
                     }),
                 }
             }
@@ -813,6 +824,7 @@ impl Tool for ComposioTool {
                 error: Some(format!(
                     "Unknown action '{action}'. Use 'list', 'list_accounts', 'execute', or 'connect'."
                 )),
+                screenshot_path: None,
             }),
         }
     }

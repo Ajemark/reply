@@ -58,6 +58,7 @@ impl Provider for MockProvider {
         if guard.is_empty() {
             return Ok(ChatResponse {
                 text: Some("done".into()),
+                reasoning: None,
                 tool_calls: vec![],
             });
         }
@@ -93,6 +94,7 @@ impl Tool for EchoTool {
             success: true,
             output: msg,
             error: None,
+            screenshot_path: None,
         })
     }
 }
@@ -116,6 +118,7 @@ impl Tool for FailingTool {
             success: false,
             output: String::new(),
             error: Some("Service unavailable: connection timeout".into()),
+            screenshot_path: None,
         })
     }
 }
@@ -155,6 +158,7 @@ impl Tool for CountingTool {
             success: true,
             output: format!("call #{}", *c),
             error: None,
+            screenshot_path: None,
         })
     }
 }
@@ -178,6 +182,7 @@ fn make_observer() -> Arc<dyn Observer> {
 fn text_response(text: &str) -> ChatResponse {
     ChatResponse {
         text: Some(text.into()),
+        reasoning: None,
         tool_calls: vec![],
     }
 }
@@ -185,6 +190,7 @@ fn text_response(text: &str) -> ChatResponse {
 fn tool_response(calls: Vec<ToolCall>) -> ChatResponse {
     ChatResponse {
         text: Some(String::new()),
+        reasoning: None,
         tool_calls: calls,
     }
 }
@@ -352,6 +358,7 @@ async fn agent_respects_max_tool_iterations() {
 async fn agent_handles_empty_provider_response() {
     let provider = Box::new(MockProvider::new(vec![ChatResponse {
         text: Some(String::new()),
+        reasoning: None,
         tool_calls: vec![],
     }]));
 
@@ -365,6 +372,7 @@ async fn agent_handles_empty_provider_response() {
 async fn agent_handles_none_text_response() {
     let provider = Box::new(MockProvider::new(vec![ChatResponse {
         text: None,
+        reasoning: None,
         tool_calls: vec![],
     }]));
 

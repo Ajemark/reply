@@ -51,6 +51,7 @@ impl Tool for FileReadTool {
                 success: false,
                 output: String::new(),
                 error: Some("Rate limit exceeded: too many actions in the last hour".into()),
+                screenshot_path: None,
             });
         }
 
@@ -60,6 +61,7 @@ impl Tool for FileReadTool {
                 success: false,
                 output: String::new(),
                 error: Some(format!("Path not allowed by security policy: {path}")),
+                screenshot_path: None,
             });
         }
 
@@ -71,6 +73,7 @@ impl Tool for FileReadTool {
                 success: false,
                 output: String::new(),
                 error: Some("Rate limit exceeded: action budget exhausted".into()),
+                screenshot_path: None,
             });
         }
 
@@ -82,8 +85,9 @@ impl Tool for FileReadTool {
             Err(e) => {
                 return Ok(ToolResult {
                     success: false,
-                    output: String::new(),
+                output: String::new(),
                     error: Some(format!("Failed to resolve file path: {e}")),
+                screenshot_path: None,
                 });
             }
         };
@@ -96,6 +100,7 @@ impl Tool for FileReadTool {
                     "Resolved path escapes workspace: {}",
                     resolved_path.display()
                 )),
+                screenshot_path: None,
             });
         }
 
@@ -105,19 +110,21 @@ impl Tool for FileReadTool {
                 if meta.len() > MAX_FILE_SIZE_BYTES {
                     return Ok(ToolResult {
                         success: false,
-                        output: String::new(),
+                output: String::new(),
                         error: Some(format!(
                             "File too large: {} bytes (limit: {MAX_FILE_SIZE_BYTES} bytes)",
                             meta.len()
                         )),
+                        screenshot_path: None,
                     });
                 }
             }
             Err(e) => {
                 return Ok(ToolResult {
                     success: false,
-                    output: String::new(),
+                output: String::new(),
                     error: Some(format!("Failed to read file metadata: {e}")),
+                screenshot_path: None,
                 });
             }
         }
@@ -127,11 +134,13 @@ impl Tool for FileReadTool {
                 success: true,
                 output: contents,
                 error: None,
+                screenshot_path: None,
             }),
             Err(e) => Ok(ToolResult {
                 success: false,
                 output: String::new(),
                 error: Some(format!("Failed to read file: {e}")),
+                screenshot_path: None,
             }),
         }
     }

@@ -421,9 +421,9 @@ mod tests {
     fn tool_result_serde() {
         let result = ToolResult {
             success: true,
-            output: "hello".into(),
+                output: "hello".into(),
             error: None,
-        };
+                screenshot_path: None,        };
         let json = serde_json::to_string(&result).unwrap();
         let parsed: ToolResult = serde_json::from_str(&json).unwrap();
         assert!(parsed.success);
@@ -435,9 +435,9 @@ mod tests {
     fn tool_result_with_error_serde() {
         let result = ToolResult {
             success: false,
-            output: String::new(),
+                output: String::new(),
             error: Some("boom".into()),
-        };
+                screenshot_path: None,        };
         let json = serde_json::to_string(&result).unwrap();
         let parsed: ToolResult = serde_json::from_str(&json).unwrap();
         assert!(!parsed.success);

@@ -500,6 +500,7 @@ impl Agent {
 
             self.history.push(ConversationMessage::AssistantToolCalls {
                 text: response.text.clone(),
+                reasoning: response.reasoning.clone(),
                 tool_calls: response.tool_calls.clone(),
             });
 
@@ -632,6 +633,7 @@ mod tests {
             if guard.is_empty() {
                 return Ok(crate::providers::ChatResponse {
                     text: Some("done".into()),
+                    reasoning: None,
                     tool_calls: vec![],
                 });
             }
@@ -660,6 +662,7 @@ mod tests {
                 success: true,
                 output: "tool-out".into(),
                 error: None,
+                screenshot_path: None,
             })
         }
     }
@@ -669,6 +672,7 @@ mod tests {
         let provider = Box::new(MockProvider {
             responses: Mutex::new(vec![crate::providers::ChatResponse {
                 text: Some("hello".into()),
+                reasoning: None,
                 tool_calls: vec![],
             }]),
         });
@@ -703,6 +707,7 @@ mod tests {
             responses: Mutex::new(vec![
                 crate::providers::ChatResponse {
                     text: Some(String::new()),
+                    reasoning: None,
                     tool_calls: vec![crate::providers::ToolCall {
                         id: "tc1".into(),
                         name: "echo".into(),
@@ -711,6 +716,7 @@ mod tests {
                 },
                 crate::providers::ChatResponse {
                     text: Some("done".into()),
+                    reasoning: None,
                     tool_calls: vec![],
                 },
             ]),

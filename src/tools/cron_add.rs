@@ -54,6 +54,7 @@ impl Tool for CronAddTool {
                 success: false,
                 output: String::new(),
                 error: Some("cron is disabled by config (cron.enabled=false)".to_string()),
+                screenshot_path: None,
             });
         }
 
@@ -63,16 +64,18 @@ impl Tool for CronAddTool {
                 Err(e) => {
                     return Ok(ToolResult {
                         success: false,
-                        output: String::new(),
+                output: String::new(),
                         error: Some(format!("Invalid schedule: {e}")),
+                screenshot_path: None,
                     });
                 }
             },
             None => {
                 return Ok(ToolResult {
                     success: false,
-                    output: String::new(),
+                output: String::new(),
                     error: Some("Missing 'schedule' parameter".to_string()),
+                screenshot_path: None,
                 });
             }
         };
@@ -88,8 +91,9 @@ impl Tool for CronAddTool {
             Some(other) => {
                 return Ok(ToolResult {
                     success: false,
-                    output: String::new(),
+                output: String::new(),
                     error: Some(format!("Invalid job_type: {other}")),
+                screenshot_path: None,
                 });
             }
             None => {
@@ -114,8 +118,9 @@ impl Tool for CronAddTool {
                     _ => {
                         return Ok(ToolResult {
                             success: false,
-                            output: String::new(),
+                output: String::new(),
                             error: Some("Missing 'command' for shell job".to_string()),
+                screenshot_path: None,
                         });
                     }
                 };
@@ -123,8 +128,9 @@ impl Tool for CronAddTool {
                 if !self.security.is_command_allowed(command) {
                     return Ok(ToolResult {
                         success: false,
-                        output: String::new(),
+                output: String::new(),
                         error: Some(format!("Command blocked by security policy: {command}")),
+                screenshot_path: None,
                     });
                 }
 
@@ -136,8 +142,9 @@ impl Tool for CronAddTool {
                     _ => {
                         return Ok(ToolResult {
                             success: false,
-                            output: String::new(),
+                output: String::new(),
                             error: Some("Missing 'prompt' for agent job".to_string()),
+                screenshot_path: None,
                         });
                     }
                 };
@@ -148,8 +155,9 @@ impl Tool for CronAddTool {
                         Err(e) => {
                             return Ok(ToolResult {
                                 success: false,
-                                output: String::new(),
+                output: String::new(),
                                 error: Some(format!("Invalid session_target: {e}")),
+                screenshot_path: None,
                             });
                         }
                     },
@@ -167,8 +175,9 @@ impl Tool for CronAddTool {
                         Err(e) => {
                             return Ok(ToolResult {
                                 success: false,
-                                output: String::new(),
+                output: String::new(),
                                 error: Some(format!("Invalid delivery config: {e}")),
+                screenshot_path: None,
                             });
                         }
                     },
@@ -200,11 +209,13 @@ impl Tool for CronAddTool {
                     "enabled": job.enabled
                 }))?,
                 error: None,
+                screenshot_path: None,
             }),
             Err(e) => Ok(ToolResult {
                 success: false,
                 output: String::new(),
                 error: Some(e.to_string()),
+                screenshot_path: None,
             }),
         }
     }

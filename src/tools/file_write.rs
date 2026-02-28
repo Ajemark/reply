@@ -58,6 +58,7 @@ impl Tool for FileWriteTool {
                 success: false,
                 output: String::new(),
                 error: Some("Action blocked: autonomy is read-only".into()),
+                screenshot_path: None,
             });
         }
 
@@ -66,6 +67,7 @@ impl Tool for FileWriteTool {
                 success: false,
                 output: String::new(),
                 error: Some("Rate limit exceeded: too many actions in the last hour".into()),
+                screenshot_path: None,
             });
         }
 
@@ -75,6 +77,7 @@ impl Tool for FileWriteTool {
                 success: false,
                 output: String::new(),
                 error: Some(format!("Path not allowed by security policy: {path}")),
+                screenshot_path: None,
             });
         }
 
@@ -85,6 +88,7 @@ impl Tool for FileWriteTool {
                 success: false,
                 output: String::new(),
                 error: Some("Invalid path: missing parent directory".into()),
+                screenshot_path: None,
             });
         };
 
@@ -97,8 +101,9 @@ impl Tool for FileWriteTool {
             Err(e) => {
                 return Ok(ToolResult {
                     success: false,
-                    output: String::new(),
+                output: String::new(),
                     error: Some(format!("Failed to resolve file path: {e}")),
+                screenshot_path: None,
                 });
             }
         };
@@ -111,6 +116,7 @@ impl Tool for FileWriteTool {
                     "Resolved path escapes workspace: {}",
                     resolved_parent.display()
                 )),
+                screenshot_path: None,
             });
         }
 
@@ -119,6 +125,7 @@ impl Tool for FileWriteTool {
                 success: false,
                 output: String::new(),
                 error: Some("Invalid path: missing file name".into()),
+                screenshot_path: None,
             });
         };
 
@@ -129,11 +136,12 @@ impl Tool for FileWriteTool {
             if meta.file_type().is_symlink() {
                 return Ok(ToolResult {
                     success: false,
-                    output: String::new(),
+                output: String::new(),
                     error: Some(format!(
                         "Refusing to write through symlink: {}",
                         resolved_target.display()
                     )),
+                    screenshot_path: None,
                 });
             }
         }
@@ -143,19 +151,22 @@ impl Tool for FileWriteTool {
                 success: false,
                 output: String::new(),
                 error: Some("Rate limit exceeded: action budget exhausted".into()),
+                screenshot_path: None,
             });
         }
 
         match tokio::fs::write(&resolved_target, content).await {
             Ok(()) => Ok(ToolResult {
                 success: true,
-                output: format!("Written {} bytes to {path}", content.len()),
+                output: format!("Successfully wrote {} bytes to {}", content.len(), path),
                 error: None,
+                screenshot_path: None,
             }),
             Err(e) => Ok(ToolResult {
                 success: false,
                 output: String::new(),
                 error: Some(format!("Failed to write file: {e}")),
+                screenshot_path: None,
             }),
         }
     }

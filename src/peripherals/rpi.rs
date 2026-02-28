@@ -104,6 +104,8 @@ impl Tool for RpiGpioReadTool {
         .await??;
 
         Ok(ToolResult {
+                screenshot_path: None,
+                
             success: true,
             output: format!("pin {} = {}", pin, value),
             error: None,
@@ -165,6 +167,8 @@ impl Tool for RpiGpioWriteTool {
         .await??;
 
         Ok(ToolResult {
+                screenshot_path: None,
+                
             success: true,
             output: format!("pin {} = {}", pin, value),
             error: None,

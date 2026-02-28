@@ -614,7 +614,11 @@ impl Provider for OllamaProvider {
             } else {
                 Some(response.message.content)
             };
-            return Ok(ChatResponse { text, tool_calls });
+            return Ok(ChatResponse {
+                text,
+                reasoning: None,
+                tool_calls,
+            });
         }
 
         // Plain text response.
@@ -630,6 +634,7 @@ impl Provider for OllamaProvider {
                         "I was thinking about this: {}... but I didn't complete my response. Could you try asking again?",
                         if thinking.len() > 200 { &thinking[..200] } else { thinking }
                     )),
+                    reasoning: None,
                     tool_calls: vec![],
                 });
             }
@@ -637,6 +642,7 @@ impl Provider for OllamaProvider {
         }
         Ok(ChatResponse {
             text: Some(content),
+            reasoning: None,
             tool_calls: vec![],
         })
     }
@@ -879,6 +885,7 @@ mod tests {
         let messages = vec![ChatMessage {
             role: "assistant".into(),
             content: r#"{"content":null,"tool_calls":[{"id":"call_1","name":"shell","arguments":"{\"command\":\"ls\"}"}]}"#.into(),
+            reasoning: None,
         }];
 
         let converted = provider.convert_messages(&messages);
@@ -903,10 +910,12 @@ mod tests {
             ChatMessage {
                 role: "assistant".into(),
                 content: r#"{"content":null,"tool_calls":[{"id":"call_7","name":"file_read","arguments":"{\"path\":\"README.md\"}"}]}"#.into(),
+                reasoning: None,
             },
             ChatMessage {
                 role: "tool".into(),
                 content: r#"{"tool_call_id":"call_7","content":"ok"}"#.into(),
+                reasoning: None,
             },
         ];
 
@@ -925,6 +934,7 @@ mod tests {
         let messages = vec![ChatMessage {
             role: "user".into(),
             content: "Inspect this screenshot [IMAGE:data:image/png;base64,abcd==]".into(),
+            reasoning: None,
         }];
 
         let converted = provider.convert_messages(&messages);

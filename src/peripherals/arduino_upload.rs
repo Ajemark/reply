@@ -52,6 +52,8 @@ impl Tool for ArduinoUploadTool {
 
         if code.trim().is_empty() {
             return Ok(ToolResult {
+                screenshot_path: None,
+                
                 success: false,
                 output: String::new(),
                 error: Some("Code cannot be empty".into()),
@@ -61,6 +63,8 @@ impl Tool for ArduinoUploadTool {
         // Check arduino-cli exists
         if Command::new("arduino-cli").arg("version").output().is_err() {
             return Ok(ToolResult {
+                screenshot_path: None,
+                
                 success: false,
                 output: String::new(),
                 error: Some(
@@ -77,6 +81,8 @@ impl Tool for ArduinoUploadTool {
 
         if let Err(e) = tokio::fs::create_dir_all(&sketch_dir).await {
             return Ok(ToolResult {
+                screenshot_path: None,
+                
                 success: false,
                 output: format!("Failed to create sketch dir: {}", e),
                 error: Some(e.to_string()),
@@ -86,6 +92,8 @@ impl Tool for ArduinoUploadTool {
         if let Err(e) = tokio::fs::write(&ino_path, code).await {
             let _ = tokio::fs::remove_dir_all(&temp_dir).await;
             return Ok(ToolResult {
+                screenshot_path: None,
+                
                 success: false,
                 output: format!("Failed to write sketch: {}", e),
                 error: Some(e.to_string()),
@@ -105,6 +113,8 @@ impl Tool for ArduinoUploadTool {
             Err(e) => {
                 let _ = tokio::fs::remove_dir_all(&temp_dir).await;
                 return Ok(ToolResult {
+                screenshot_path: None,
+                
                     success: false,
                     output: format!("arduino-cli compile failed: {}", e),
                     error: Some(e.to_string()),
@@ -116,6 +126,8 @@ impl Tool for ArduinoUploadTool {
             let stderr = String::from_utf8_lossy(&compile_output.stderr);
             let _ = tokio::fs::remove_dir_all(&temp_dir).await;
             return Ok(ToolResult {
+                screenshot_path: None,
+                
                 success: false,
                 output: format!("Compile failed:\n{}", stderr),
                 error: Some("Arduino compile error".into()),
@@ -132,6 +144,8 @@ impl Tool for ArduinoUploadTool {
             Err(e) => {
                 let _ = tokio::fs::remove_dir_all(&temp_dir).await;
                 return Ok(ToolResult {
+                screenshot_path: None,
+                
                     success: false,
                     output: format!("arduino-cli upload failed: {}", e),
                     error: Some(e.to_string()),
@@ -144,6 +158,8 @@ impl Tool for ArduinoUploadTool {
         if !upload_output.status.success() {
             let stderr = String::from_utf8_lossy(&upload_output.stderr);
             return Ok(ToolResult {
+                screenshot_path: None,
+                
                 success: false,
                 output: format!("Upload failed:\n{}", stderr),
                 error: Some("Arduino upload error".into()),
@@ -151,6 +167,8 @@ impl Tool for ArduinoUploadTool {
         }
 
         Ok(ToolResult {
+                screenshot_path: None,
+                
             success: true,
             output:
                 "Sketch compiled and uploaded successfully. The Arduino is now running your code."

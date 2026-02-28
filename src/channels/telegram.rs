@@ -749,12 +749,36 @@ Allowlist Telegram username (without '@') or numeric user ID.",
     fn parse_update_message(&self, update: &serde_json::Value) -> Option<ChannelMessage> {
         let message = update.get("message")?;
 
-        let text = message.get("text").and_then(serde_json::Value::as_str)?;
+        let chat_id = message
+            .get("chat")
+            .and_then(|chat| chat.get("id"))
+            .and_then(serde_json::Value::as_i64)
+            .map(|id| id.to_string())?;
 
-        let username = message
+        let message_id = message
+            .get("message_id")
+            .and_then(serde_json::Value::as_i64)
+            .unwrap_or(0);
+
+        // Extract thread/topic ID for forum support
+        let thread_id = message
+            .get("message_thread_id")
+            .and_then(serde_json::Value::as_i64)
+            .map(|id| id.to_string());
+
+        // reply_target: chat_id or chat_id:thread_id format
+        let reply_target = if let Some(ref tid) = thread_id {
+            format!("{}:{}", chat_id, tid)
+        } else {
+            chat_id.clone()
+        };
+
+        let username_opt = message
             .get("from")
             .and_then(|from| from.get("username"))
-            .and_then(serde_json::Value::as_str)
+            .and_then(serde_json::Value::as_str);
+        
+        let username = username_opt
             .unwrap_or("unknown")
             .to_string();
 
@@ -769,6 +793,26 @@ Allowlist Telegram username (without '@') or numeric user ID.",
         } else {
             username.clone()
         };
+
+        if message.get("photo").is_some() || message.get("document").is_some() || message.get("video").is_some() || message.get("audio").is_some() || message.get("voice").is_some() {
+            // Found media attachment block.
+            // Replace the missing text with a descriptive marker so the agent can inform the user.
+            let fallback_text = "[System: The user sent an unsupported media attachment. Inform them that you can only process text and links right now.]".to_string();
+            return Some(ChannelMessage {
+                id: format!("telegram_{chat_id}_{message_id}"),
+                sender: sender_identity,
+                reply_target,
+                content: fallback_text,
+                channel: "telegram".to_string(),
+                timestamp: std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs(),
+                thread_ts: None,
+            });
+        }
+
+        let text = message.get("text").and_then(serde_json::Value::as_str)?;
 
         let mut identities = vec![username.as_str()];
         if let Some(id) = sender_id.as_deref() {
@@ -1448,6 +1492,10 @@ impl Channel for TelegramChannel {
     }
 
     async fn send_draft(&self, message: &SendMessage) -> anyhow::Result<Option<String>> {
+        if !self.supports_draft_updates() {
+            return Ok(None);
+        }
+
         let (chat_id, thread_id) = Self::parse_reply_target(&message.recipient);
         let initial_text = if message.content.is_empty() {
             "...".to_string()

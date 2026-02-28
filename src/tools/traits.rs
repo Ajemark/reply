@@ -7,6 +7,7 @@ pub struct ToolResult {
     pub success: bool,
     pub output: String,
     pub error: Option<String>,
+    pub screenshot_path: Option<String>,
 }
 
 /// Description of a tool for the LLM
@@ -76,6 +77,7 @@ mod tests {
                     .unwrap_or_default()
                     .to_string(),
                 error: None,
+                screenshot_path: None,
             })
         }
     }
@@ -110,6 +112,7 @@ mod tests {
             success: false,
             output: String::new(),
             error: Some("boom".into()),
+            screenshot_path: None,
         };
 
         let json = serde_json::to_string(&result).unwrap();

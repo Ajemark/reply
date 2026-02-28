@@ -77,18 +77,23 @@ impl ScreenshotTool {
                 success: false,
                 output: String::new(),
                 error: Some("Filename contains characters unsafe for shell execution".into()),
+                screenshot_path: None,
             });
         }
 
         let output_path = self.security.workspace_dir.join(&safe_name);
         let output_str = output_path.to_string_lossy().to_string();
 
-        let Some(mut cmd_args) = Self::screenshot_command(&output_str) else {
-            return Ok(ToolResult {
-                success: false,
-                output: String::new(),
-                error: Some("Screenshot not supported on this platform".into()),
-            });
+        let mut cmd_args = match Self::screenshot_command(&output_str) {
+            Some(args) => args,
+            None => {
+                return Ok(ToolResult {
+                    success: false,
+                    output: String::new(),
+                    error: Some("Screenshot not supported on this platform".into()),
+                    screenshot_path: None,
+                });
+            }
         };
 
         // macOS region flags
@@ -123,12 +128,14 @@ impl ScreenshotTool {
                                 "No screenshot tool found. Install gnome-screenshot, scrot, or ImageMagick."
                                     .into(),
                             ),
+                            screenshot_path: None,
                         });
                     }
                     return Ok(ToolResult {
                         success: false,
                         output: String::new(),
                         error: Some(format!("Screenshot command failed: {stderr}")),
+                        screenshot_path: None,
                     });
                 }
 
@@ -138,6 +145,7 @@ impl ScreenshotTool {
                 success: false,
                 output: String::new(),
                 error: Some(format!("Failed to execute screenshot command: {e}")),
+                screenshot_path: None,
             }),
             Err(_) => Ok(ToolResult {
                 success: false,
@@ -145,6 +153,7 @@ impl ScreenshotTool {
                 error: Some(format!(
                     "Screenshot timed out after {SCREENSHOT_TIMEOUT_SECS}s"
                 )),
+                screenshot_path: None,
             }),
         }
     }
@@ -163,6 +172,7 @@ impl ScreenshotTool {
                         meta.len(),
                     ),
                     error: None,
+                    screenshot_path: Some(output_path.to_string_lossy().to_string()),
                 });
             }
         }
@@ -198,14 +208,16 @@ impl ScreenshotTool {
 
                 Ok(ToolResult {
                     success: true,
-                    output: output_msg,
+                    output: format!("Screenshot saved to: {}", output_path.display()),
                     error: None,
+                    screenshot_path: Some(output_path.to_string_lossy().to_string()),
                 })
             }
             Err(e) => Ok(ToolResult {
                 success: false,
                 output: format!("Screenshot saved to: {}", output_path.display()),
                 error: Some(format!("Failed to read screenshot file: {e}")),
+                screenshot_path: None,
             }),
         }
     }
@@ -243,6 +255,7 @@ impl Tool for ScreenshotTool {
                 success: false,
                 output: String::new(),
                 error: Some("Action blocked: autonomy is read-only".into()),
+                screenshot_path: None,
             });
         }
         self.capture(args).await

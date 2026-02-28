@@ -126,8 +126,9 @@ impl GitOperationsTool {
 
         Ok(ToolResult {
             success: true,
-            output: serde_json::to_string_pretty(&result).unwrap_or_default(),
+                output: serde_json::to_string_pretty(&result).unwrap_or_default(),
             error: None,
+                screenshot_path: None,
         })
     }
 
@@ -205,8 +206,9 @@ impl GitOperationsTool {
 
         Ok(ToolResult {
             success: true,
-            output: serde_json::to_string_pretty(&result).unwrap_or_default(),
+                output: serde_json::to_string_pretty(&result).unwrap_or_default(),
             error: None,
+                screenshot_path: None,
         })
     }
 
@@ -241,9 +243,10 @@ impl GitOperationsTool {
 
         Ok(ToolResult {
             success: true,
-            output: serde_json::to_string_pretty(&json!({ "commits": commits }))
+                output: serde_json::to_string_pretty(&json!({ "commits": commits }))
                 .unwrap_or_default(),
             error: None,
+                screenshot_path: None,
         })
     }
 
@@ -270,12 +273,13 @@ impl GitOperationsTool {
 
         Ok(ToolResult {
             success: true,
-            output: serde_json::to_string_pretty(&json!({
+                output: serde_json::to_string_pretty(&json!({
                 "current": current,
                 "branches": branches
             }))
             .unwrap_or_default(),
             error: None,
+                screenshot_path: None,
         })
     }
 
@@ -315,11 +319,13 @@ impl GitOperationsTool {
                 success: true,
                 output: format!("Committed: {message}"),
                 error: None,
+                screenshot_path: None,
             }),
             Err(e) => Ok(ToolResult {
                 success: false,
                 output: String::new(),
                 error: Some(format!("Commit failed: {e}")),
+                screenshot_path: None,
             }),
         }
     }
@@ -340,11 +346,13 @@ impl GitOperationsTool {
                 success: true,
                 output: format!("Staged: {paths}"),
                 error: None,
+                screenshot_path: None,
             }),
             Err(e) => Ok(ToolResult {
                 success: false,
                 output: String::new(),
                 error: Some(format!("Add failed: {e}")),
+                screenshot_path: None,
             }),
         }
     }
@@ -376,11 +384,13 @@ impl GitOperationsTool {
                 success: true,
                 output: format!("Switched to branch: {branch_name}"),
                 error: None,
+                screenshot_path: None,
             }),
             Err(e) => Ok(ToolResult {
                 success: false,
                 output: String::new(),
                 error: Some(format!("Checkout failed: {e}")),
+                screenshot_path: None,
             }),
         }
     }
@@ -413,11 +423,13 @@ impl GitOperationsTool {
                 success: true,
                 output: out,
                 error: None,
+                screenshot_path: None,
             }),
             Err(e) => Ok(ToolResult {
                 success: false,
                 output: String::new(),
                 error: Some(format!("Stash {action} failed: {e}")),
+                screenshot_path: None,
             }),
         }
     }
@@ -486,8 +498,9 @@ impl Tool for GitOperationsTool {
             None => {
                 return Ok(ToolResult {
                     success: false,
-                    output: String::new(),
+                output: String::new(),
                     error: Some("Missing 'operation' parameter".into()),
+                screenshot_path: None,
                 });
             }
         };
@@ -508,8 +521,9 @@ impl Tool for GitOperationsTool {
             if !found_git {
                 return Ok(ToolResult {
                     success: false,
-                    output: String::new(),
+                output: String::new(),
                     error: Some("Not in a git repository".into()),
+                screenshot_path: None,
                 });
             }
         }
@@ -519,10 +533,11 @@ impl Tool for GitOperationsTool {
             if !self.security.can_act() {
                 return Ok(ToolResult {
                     success: false,
-                    output: String::new(),
+                output: String::new(),
                     error: Some(
                         "Action blocked: git write operations require higher autonomy level".into(),
                     ),
+                    screenshot_path: None,
                 });
             }
 
@@ -530,8 +545,9 @@ impl Tool for GitOperationsTool {
                 AutonomyLevel::ReadOnly => {
                     return Ok(ToolResult {
                         success: false,
-                        output: String::new(),
+                output: String::new(),
                         error: Some("Action blocked: read-only mode".into()),
+                screenshot_path: None,
                     });
                 }
                 AutonomyLevel::Supervised | AutonomyLevel::Full => {}
@@ -544,6 +560,7 @@ impl Tool for GitOperationsTool {
                 success: false,
                 output: String::new(),
                 error: Some("Action blocked: rate limit exceeded".into()),
+                screenshot_path: None,
             });
         }
 
@@ -561,6 +578,7 @@ impl Tool for GitOperationsTool {
                 success: false,
                 output: String::new(),
                 error: Some(format!("Unknown operation: {operation}")),
+                screenshot_path: None,
             }),
         }
     }

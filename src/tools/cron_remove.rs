@@ -41,6 +41,7 @@ impl Tool for CronRemoveTool {
                 success: false,
                 output: String::new(),
                 error: Some("cron is disabled by config (cron.enabled=false)".to_string()),
+                screenshot_path: None,
             });
         }
 
@@ -49,8 +50,9 @@ impl Tool for CronRemoveTool {
             _ => {
                 return Ok(ToolResult {
                     success: false,
-                    output: String::new(),
+                output: String::new(),
                     error: Some("Missing 'job_id' parameter".to_string()),
+                screenshot_path: None,
                 });
             }
         };
@@ -60,11 +62,13 @@ impl Tool for CronRemoveTool {
                 success: true,
                 output: format!("Removed cron job {job_id}"),
                 error: None,
+                screenshot_path: None,
             }),
             Err(e) => Ok(ToolResult {
                 success: false,
                 output: String::new(),
                 error: Some(e.to_string()),
+                screenshot_path: None,
             }),
         }
     }

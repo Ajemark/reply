@@ -44,6 +44,7 @@ impl ProxyConfigTool {
                 success: false,
                 output: String::new(),
                 error: Some("Action blocked: autonomy is read-only".into()),
+                screenshot_path: None,
             });
         }
 
@@ -52,6 +53,7 @@ impl ProxyConfigTool {
                 success: false,
                 output: String::new(),
                 error: Some("Action blocked: rate limit exceeded".into()),
+                screenshot_path: None,
             });
         }
 
@@ -143,19 +145,20 @@ impl ProxyConfigTool {
         let runtime_proxy = runtime_proxy_config();
         Ok(ToolResult {
             success: true,
-            output: serde_json::to_string_pretty(&json!({
+                output: serde_json::to_string_pretty(&json!({
                 "proxy": Self::proxy_json(&file_proxy),
                 "runtime_proxy": Self::proxy_json(&runtime_proxy),
                 "environment": Self::env_snapshot(),
             }))?,
             error: None,
+                screenshot_path: None,
         })
     }
 
     fn handle_list_services(&self) -> anyhow::Result<ToolResult> {
         Ok(ToolResult {
             success: true,
-            output: serde_json::to_string_pretty(&json!({
+                output: serde_json::to_string_pretty(&json!({
                 "supported_service_keys": ProxyConfig::supported_service_keys(),
                 "supported_selectors": ProxyConfig::supported_service_selectors(),
                 "usage_example": {
@@ -165,6 +168,7 @@ impl ProxyConfigTool {
                 }
             }))?,
             error: None,
+                screenshot_path: None,
         })
     }
 
@@ -256,12 +260,13 @@ impl ProxyConfigTool {
 
         Ok(ToolResult {
             success: true,
-            output: serde_json::to_string_pretty(&json!({
+                output: serde_json::to_string_pretty(&json!({
                 "message": "Proxy configuration updated",
                 "proxy": Self::proxy_json(&proxy),
                 "environment": Self::env_snapshot(),
             }))?,
             error: None,
+                screenshot_path: None,
         })
     }
 
@@ -283,12 +288,13 @@ impl ProxyConfigTool {
 
         Ok(ToolResult {
             success: true,
-            output: serde_json::to_string_pretty(&json!({
+                output: serde_json::to_string_pretty(&json!({
                 "message": "Proxy disabled",
                 "proxy": Self::proxy_json(&cfg.proxy),
                 "environment": Self::env_snapshot(),
             }))?,
             error: None,
+                screenshot_path: None,
         })
     }
 
@@ -313,12 +319,13 @@ impl ProxyConfigTool {
 
         Ok(ToolResult {
             success: true,
-            output: serde_json::to_string_pretty(&json!({
+                output: serde_json::to_string_pretty(&json!({
                 "message": "Proxy environment variables applied",
                 "proxy": Self::proxy_json(&proxy),
                 "environment": Self::env_snapshot(),
             }))?,
             error: None,
+                screenshot_path: None,
         })
     }
 
@@ -326,11 +333,12 @@ impl ProxyConfigTool {
         ProxyConfig::clear_process_env();
         Ok(ToolResult {
             success: true,
-            output: serde_json::to_string_pretty(&json!({
+                output: serde_json::to_string_pretty(&json!({
                 "message": "Proxy environment variables cleared",
                 "environment": Self::env_snapshot(),
             }))?,
             error: None,
+                screenshot_path: None,
         })
     }
 }
@@ -430,6 +438,7 @@ impl Tool for ProxyConfigTool {
                 success: false,
                 output: String::new(),
                 error: Some(error.to_string()),
+                screenshot_path: None,
             }),
         }
     }

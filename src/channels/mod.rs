@@ -107,7 +107,7 @@ const MEMORY_CONTEXT_MAX_ENTRIES: usize = 4;
 const MEMORY_CONTEXT_ENTRY_MAX_CHARS: usize = 800;
 const MEMORY_CONTEXT_MAX_CHARS: usize = 4_000;
 const CHANNEL_HISTORY_COMPACT_KEEP_MESSAGES: usize = 12;
-const CHANNEL_HISTORY_COMPACT_CONTENT_CHARS: usize = 600;
+const CHANNEL_HISTORY_COMPACT_CONTENT_CHARS: usize = 4_000;
 
 type ProviderCacheMap = Arc<Mutex<HashMap<String, Arc<dyn Provider>>>>;
 type RouteSelectionMap = Arc<Mutex<HashMap<String, ChannelRouteSelection>>>;
@@ -277,19 +277,23 @@ fn build_channel_system_prompt(base_prompt: &str, channel_name: &str) -> String 
 
 fn normalize_cached_channel_turns(turns: Vec<ChatMessage>) -> Vec<ChatMessage> {
     let mut normalized = Vec::with_capacity(turns.len());
-    let mut expecting_user = true;
 
     for turn in turns {
-        match (expecting_user, turn.role.as_str()) {
-            (true, "user") => {
+        // We want to preserve all user turns (even consecutive ones from interruptions),
+        // but we should avoid consecutive assistant turns which would confuse the LLM API.
+        match turn.role.as_str() {
+            "user" => {
                 normalized.push(turn);
-                expecting_user = false;
             }
-            (false, "assistant") => {
+            "assistant" => {
+                // Ensure we don't have back-to-back assistant messages, or assistant messages first.
+                if normalized.last().map(|m| m.role.as_str()) == Some("user") {
+                    normalized.push(turn);
+                }
+            }
+            _ => {
                 normalized.push(turn);
-                expecting_user = true;
             }
-            _ => {}
         }
     }
 
@@ -1316,10 +1320,15 @@ async fn process_channel_message(
                 format!("{tool_summary}\n{response}")
             };
 
+            let assistant_reasoning = history.last().and_then(|m| m.reasoning.clone());
             append_sender_turn(
                 ctx.as_ref(),
                 &history_key,
-                ChatMessage::assistant(&history_response),
+                ChatMessage {
+                    role: "assistant".to_string(),
+                    content: history_response,
+                    reasoning: assistant_reasoning,
+                },
             );
             println!(
                 "  🤖 Reply ({}ms): {}",
@@ -3056,6 +3065,15 @@ mod tests {
             _model: &str,
             _temperature: f64,
         ) -> anyhow::Result<String> {
+            let has_iteration_limit_prompt = messages.iter().any(|msg| {
+                msg.role == "system"
+                    && msg.content.contains("CRITICAL: You have reached the tool iteration limit")
+            });
+
+            if has_iteration_limit_prompt {
+                return Ok("⚠️ Note: I paused because I reached the configured limit of 3 automatic actions".to_string());
+            }
+
             let completed_iterations = Self::completed_tool_iterations(messages);
             if completed_iterations >= self.required_tool_iterations {
                 Ok(format!(
@@ -3199,6 +3217,7 @@ mod tests {
                     success: false,
                     output: String::new(),
                     error: Some("unexpected symbol".to_string()),
+                    screenshot_path: None,
                 });
             }
 
@@ -3206,6 +3225,7 @@ mod tests {
                 success: true,
                 output: r#"{"symbol":"BTC","price_usd":65000}"#.to_string(),
                 error: None,
+                screenshot_path: None,
             })
         }
     }
@@ -3752,7 +3772,8 @@ mod tests {
         let sent_messages = channel_impl.sent_messages.lock().await;
         assert_eq!(sent_messages.len(), 1);
         assert!(sent_messages[0].starts_with("chat-iter-fail:"));
-        assert!(sent_messages[0].contains("⚠️ Error: Agent exceeded maximum tool iterations (3)"));
+        println!("Actual sent message: {:?}", sent_messages[0]);
+        assert!(sent_messages[0].contains("⚠️ Note: I paused because I reached the configured limit of 3 automatic actions"));
     }
 
     struct NoopMemory;

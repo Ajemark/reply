@@ -143,8 +143,9 @@ impl PromptSection for SafetySection {
     }
 
     fn build(&self, _ctx: &PromptContext<'_>) -> Result<String> {
-        Ok("## Safety\n\n- Do not exfiltrate private data.\n- Do not run destructive commands without asking.\n- Do not bypass oversight or approval mechanisms.\n- Prefer `trash` over `rm`.\n- When in doubt, ask before acting externally.".into())
+        Ok("## Safety & Conduct\n\n- Do not exfiltrate private data.\n- Do not run destructive commands without asking.\n- Do not bypass oversight or approval mechanisms.\n- Prefer `trash` over `rm`.\n- When in doubt, ask before acting externally.\n\n## Anti-Hallucination Policy\n\n- CRITICAL: If a tool returns an error, fails, or is blocked, DO NOT invent, guess, or hallucinate the result. You MUST explicitly state to the user that the tool failed and explain why you cannot provide the requested information.".into())
     }
+
 }
 
 impl PromptSection for SkillsSection {
@@ -268,6 +269,7 @@ mod tests {
                 success: true,
                 output: "ok".into(),
                 error: None,
+                screenshot_path: None,
             })
         }
     }

@@ -585,18 +585,22 @@ data: [DONE]
             ChatMessage {
                 role: "system".into(),
                 content: "You are helpful.".into(),
+                reasoning: None,
             },
             ChatMessage {
                 role: "user".into(),
                 content: "Hi".into(),
+                reasoning: None,
             },
             ChatMessage {
                 role: "assistant".into(),
                 content: "Hello!".into(),
+                reasoning: None,
             },
             ChatMessage {
                 role: "user".into(),
                 content: "Thanks".into(),
+                reasoning: None,
             },
         ];
         let (instructions, input) = build_responses_input(&messages);
@@ -620,6 +624,7 @@ data: [DONE]
         let messages = vec![ChatMessage {
             role: "user".into(),
             content: "Hello".into(),
+            reasoning: None,
         }];
         let (instructions, input) = build_responses_input(&messages);
         assert_eq!(instructions, DEFAULT_CODEX_INSTRUCTIONS);
@@ -632,10 +637,12 @@ data: [DONE]
             ChatMessage {
                 role: "tool".into(),
                 content: "result".into(),
+                reasoning: None,
             },
             ChatMessage {
                 role: "user".into(),
                 content: "Go".into(),
+                reasoning: None,
             },
         ];
         let (instructions, input) = build_responses_input(&messages);

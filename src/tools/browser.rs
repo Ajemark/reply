@@ -117,6 +117,7 @@ struct AgentBrowserResponse {
     success: bool,
     data: Option<Value>,
     error: Option<String>,
+    screenshot_path: Option<String>,
 }
 
 /// Response format from computer-use sidecar.
@@ -124,7 +125,6 @@ struct AgentBrowserResponse {
 struct ComputerUseResponse {
     #[serde(default)]
     success: Option<bool>,
-    #[serde(default)]
     data: Option<Value>,
     #[serde(default)]
     error: Option<String>,
@@ -195,6 +195,8 @@ pub enum BrowserAction {
         #[serde(default)]
         fill_value: Option<String>,
     },
+    /// Consolidated scrape: open, wait, get title/url/snapshot
+    Scrape { url: String },
 }
 
 impl BrowserAction {
@@ -209,6 +211,7 @@ impl BrowserAction {
                 | BrowserAction::Hover { .. }
                 | BrowserAction::Scroll { .. }
                 | BrowserAction::Find { .. }
+                | BrowserAction::Scrape { .. }
         )
     }
 }
@@ -496,12 +499,14 @@ impl BrowserTool {
                 success: true,
                 data: Some(json!({ "output": stdout.trim() })),
                 error: None,
+                screenshot_path: None,
             })
         } else {
             Ok(AgentBrowserResponse {
                 success: false,
                 data: None,
                 error: Some(stderr.trim().to_string()),
+                screenshot_path: None,
             })
         }
     }
@@ -613,14 +618,36 @@ impl BrowserTool {
                 }
                 self.run_command(&args).await?
             }
+
+            BrowserAction::Scrape { url } => {
+                self.validate_url(url)?;
+                // Consolidated: open -> wait -> get details
+                let _ = self.run_command(&["open", url]).await?;
+                let _ = self.run_command(&["wait", "2000"]).await?; // Brief wait for stability
+                let title_resp = self.run_command(&["get", "title"]).await?;
+                let url_resp = self.run_command(&["get", "url"]).await?;
+                let snapshot_resp = self.run_command(&["snapshot", "-c"]).await?; // Compact snapshot
+
+                AgentBrowserResponse {
+                    success: true,
+                    data: Some(json!({
+                        "title": title_resp.data.and_then(|d| d.get("output").cloned()),
+                        "url": url_resp.data.and_then(|d| d.get("output").cloned()),
+                        "snapshot": snapshot_resp.data,
+                    })),
+                    error: None,
+                    screenshot_path: None,
+                }
+            }
         };
 
-        // Post-action auto-screenshot for major actions
+        let mut screenshot_path = None;
         if resp.success && action.is_major_action() {
-            let screenshot_path = self.security.workspace_dir.join("browser_snapshot.png");
-            let path_str = screenshot_path.to_string_lossy().to_string();
+            let path = self.security.workspace_dir.join("browser_snapshot.png");
+            let path_str = path.to_string_lossy().to_string();
             if let Ok(shot_resp) = self.run_command(&["screenshot", &path_str]).await {
                 if shot_resp.success {
+                    screenshot_path = Some(path_str.clone());
                     if let Some(data) = resp.data.as_mut() {
                         if let Some(obj) = data.as_object_mut() {
                             obj.insert("screenshot_path".to_string(), json!(path_str));
@@ -632,7 +659,9 @@ impl BrowserTool {
             }
         }
 
-        self.to_result(resp)
+        let mut res = self.to_result(resp)?;
+        res.screenshot_path = screenshot_path;
+        Ok(res)
     }
 
     #[allow(clippy::unused_async)]
@@ -665,6 +694,7 @@ impl BrowserTool {
                 success: true,
                 output: serde_json::to_string_pretty(&output).unwrap_or_default(),
                 error: None,
+                screenshot_path: auto_screenshot.map(|p| p.to_string_lossy().to_string()),
             })
         }
 
@@ -812,6 +842,7 @@ impl BrowserTool {
                     success: true,
                     output,
                     error: None,
+                    screenshot_path: None,
                 });
             }
 
@@ -829,6 +860,7 @@ impl BrowserTool {
                 success: false,
                 output: String::new(),
                 error,
+                screenshot_path: None,
             });
         }
 
@@ -837,6 +869,7 @@ impl BrowserTool {
                 success: true,
                 output: body,
                 error: None,
+                screenshot_path: None,
             });
         }
 
@@ -847,6 +880,7 @@ impl BrowserTool {
                 "computer-use sidecar request failed with status {status}: {}",
                 body.trim()
             )),
+            screenshot_path: None,
         })
     }
 
@@ -875,13 +909,14 @@ impl BrowserTool {
                 success: true,
                 output,
                 error: None,
+                screenshot_path: None,
             })
         } else {
             Ok(ToolResult {
                 success: false,
                 output: String::new(),
                 error: resp.error,
-            })
+                screenshot_path: None,            })
         }
     }
 }
@@ -911,7 +946,7 @@ impl Tool for BrowserTool {
                              "get_title", "get_url", "screenshot", "wait", "press",
                              "hover", "scroll", "is_visible", "close", "find",
                              "mouse_move", "mouse_click", "mouse_drag", "key_type",
-                             "key_press", "screen_capture"],
+                             "key_press", "screen_capture", "scrape"],
                     "description": "Browser action to perform (OS-level actions require backend=computer_use)"
                 },
                 "url": {
@@ -1022,6 +1057,7 @@ impl Tool for BrowserTool {
                 success: false,
                 output: String::new(),
                 error: Some("Action blocked: autonomy is read-only".into()),
+                screenshot_path: None,
             });
         }
 
@@ -1030,6 +1066,7 @@ impl Tool for BrowserTool {
                 success: false,
                 output: String::new(),
                 error: Some("Action blocked: rate limit exceeded".into()),
+                screenshot_path: None,
             });
         }
 
@@ -1040,6 +1077,7 @@ impl Tool for BrowserTool {
                     success: false,
                     output: String::new(),
                     error: Some(error.to_string()),
+                    screenshot_path: None,
                 });
             }
         };
@@ -1055,6 +1093,7 @@ impl Tool for BrowserTool {
                 success: false,
                 output: String::new(),
                 error: Some(format!("Unknown action: {action_str}")),
+                screenshot_path: None,
             });
         }
 
@@ -1067,7 +1106,7 @@ impl Tool for BrowserTool {
                 success: false,
                 output: String::new(),
                 error: Some(unavailable_action_for_backend_error(action_str, backend)),
-            });
+                screenshot_path: None,            });
         }
 
         let action = match parse_browser_action(action_str, &args) {
@@ -1075,9 +1114,9 @@ impl Tool for BrowserTool {
             Err(e) => {
                 return Ok(ToolResult {
                     success: false,
-                    output: String::new(),
+                output: String::new(),
                     error: Some(e.to_string()),
-                });
+                screenshot_path: None,                });
             }
         };
 
@@ -1430,6 +1469,27 @@ mod native_backend {
                         "data": payload,
                     })
                 }
+                BrowserAction::Scrape { url } => {
+                    let client = self.active_client()?;
+                    self.validate_url(&url)?;
+                    client.goto(&url).await?;
+                    tokio::time::sleep(Duration::from_millis(2000)).await;
+
+                    let title = client.title().await.ok();
+                    let current_url = client.current_url().await.map(|u| u.to_string()).ok();
+                    let snapshot = self.take_accessibility_snapshot(client, false, true, None).await.ok();
+
+                    json!({
+                        "backend": "rust_native",
+                        "action": "scrape",
+                        "url": url,
+                        "data": {
+                            "title": title,
+                            "url": current_url,
+                            "snapshot": snapshot,
+                        }
+                    })
+                }
             };
 
             // Post-action auto-screenshot if requested
@@ -1446,6 +1506,7 @@ mod native_backend {
 
         async fn auto_screenshot(&self, path: &std::path::Path) -> Result<String> {
             let client = self.active_client()?;
+            tracing::info!(path = %path.display(), "Capturing auto-screenshot");
             let png = client.screenshot().await.context("Auto-screenshot failed")?;
             tokio::fs::write(path, &png)
                 .await
@@ -1463,7 +1524,7 @@ mod native_backend {
                 return Ok(());
             }
 
-            let mut capabilities: Map<String, Value> = Map::new();
+            tracing::info!(url = webdriver_url, headless, "Initializing new browser session");
             let mut chrome_options: Map<String, Value> = Map::new();
             let mut args: Vec<Value> = Vec::new();
 
@@ -1500,11 +1561,13 @@ mod native_backend {
                 .connect(webdriver_url)
                 .await
                 .with_context(|| {
+                    tracing::error!(url = webdriver_url, "Failed to connect to WebDriver");
                     format!(
                         "Failed to connect to WebDriver at {webdriver_url}. Start chromedriver/geckodriver first"
                     )
                 })?;
 
+            tracing::info!("Browser session established");
             self.client = Some(client);
             Ok(())
         }

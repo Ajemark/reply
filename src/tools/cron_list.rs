@@ -39,7 +39,7 @@ impl Tool for CronListTool {
                 success: false,
                 output: String::new(),
                 error: Some("cron is disabled by config (cron.enabled=false)".to_string()),
-            });
+                screenshot_path: None,            });
         }
 
         match cron::list_jobs(&self.config) {
@@ -47,11 +47,13 @@ impl Tool for CronListTool {
                 success: true,
                 output: serde_json::to_string_pretty(&jobs)?,
                 error: None,
+                screenshot_path: None,
             }),
             Err(e) => Ok(ToolResult {
                 success: false,
                 output: String::new(),
                 error: Some(e.to_string()),
+                screenshot_path: None,
             }),
         }
     }

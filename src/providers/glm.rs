@@ -2,7 +2,9 @@
 //! The GLM API requires JWT tokens generated from the `id.secret` API key format
 //! with a custom `sign_type: "SIGN"` header, and uses `/v4/chat/completions`.
 
-use crate::providers::traits::{ChatMessage, Provider};
+use crate::providers::traits::{
+    ChatMessage, ChatRequest as ProviderChatRequest, ChatResponse as ProviderChatResponse, Provider,
+};
 use async_trait::async_trait;
 use reqwest::Client;
 use ring::hmac;
@@ -157,7 +159,7 @@ impl Provider for GlmProvider {
         message: &str,
         model: &str,
         temperature: f64,
-    ) -> anyhow::Result<String> {
+    ) -> anyhow::Result<ProviderChatResponse> {
         let token = self.generate_token()?;
 
         let mut messages = Vec::new();
@@ -202,6 +204,11 @@ impl Provider for GlmProvider {
             .into_iter()
             .next()
             .map(|c| c.message.content)
+            .map(|text| ProviderChatResponse {
+                text: Some(text),
+                reasoning: None,
+                tool_calls: Vec::new(),
+            })
             .ok_or_else(|| anyhow::anyhow!("No response from GLM"))
     }
 
@@ -210,7 +217,7 @@ impl Provider for GlmProvider {
         messages: &[ChatMessage],
         model: &str,
         temperature: f64,
-    ) -> anyhow::Result<String> {
+    ) -> anyhow::Result<ProviderChatResponse> {
         let token = self.generate_token()?;
 
         let api_messages: Vec<Message> = messages
@@ -230,7 +237,7 @@ impl Provider for GlmProvider {
         let url = format!("{}/chat/completions", self.base_url);
 
         let response = self
-            .client
+            .http_client()
             .post(&url)
             .header("Authorization", format!("Bearer {token}"))
             .json(&request)
@@ -249,6 +256,11 @@ impl Provider for GlmProvider {
             .into_iter()
             .next()
             .map(|c| c.message.content)
+            .map(|text| ProviderChatResponse {
+                text: Some(text),
+                reasoning: None,
+                tool_calls: Vec::new(),
+            })
             .ok_or_else(|| anyhow::anyhow!("No response from GLM"))
     }
 
@@ -262,7 +274,7 @@ impl Provider for GlmProvider {
         let url = format!("{}/chat/completions", self.base_url);
         // GET will likely return 405 but establishes the TLS + HTTP/2 connection pool.
         let _ = self
-            .client
+            .http_client()
             .get(&url)
             .header("Authorization", format!("Bearer {token}"))
             .send()

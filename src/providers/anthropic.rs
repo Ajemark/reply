@@ -395,6 +395,7 @@ impl AnthropicProvider {
             } else {
                 Some(text_parts.join("\n"))
             },
+            reasoning: None,
             tool_calls,
         }
     }
@@ -928,14 +929,17 @@ mod tests {
             ChatMessage {
                 role: "system".to_string(),
                 content: "System prompt".to_string(),
+                reasoning: None,
             },
             ChatMessage {
                 role: "user".to_string(),
                 content: "Hello".to_string(),
+                reasoning: None,
             },
             ChatMessage {
                 role: "assistant".to_string(),
                 content: "Hi".to_string(),
+                reasoning: None,
             },
         ];
         // Only 2 non-system messages
@@ -947,12 +951,14 @@ mod tests {
         let mut messages = vec![ChatMessage {
             role: "system".to_string(),
             content: "System prompt".to_string(),
+            reasoning: None,
         }];
         // Add 5 non-system messages
         for i in 0..5 {
             messages.push(ChatMessage {
                 role: if i % 2 == 0 { "user" } else { "assistant" }.to_string(),
                 content: format!("Message {i}"),
+                reasoning: None,
             });
         }
         assert!(AnthropicProvider::should_cache_conversation(&messages));
@@ -966,7 +972,7 @@ mod tests {
             messages.push(ChatMessage {
                 role: if i % 2 == 0 { "user" } else { "assistant" }.to_string(),
                 content: format!("Message {i}"),
-            });
+                reasoning: None,            });
         }
         assert!(!AnthropicProvider::should_cache_conversation(&messages));
 
@@ -974,7 +980,7 @@ mod tests {
         messages.push(ChatMessage {
             role: "user".to_string(),
             content: "One more".to_string(),
-        });
+                reasoning: None,        });
         assert!(AnthropicProvider::should_cache_conversation(&messages));
     }
 
@@ -1091,6 +1097,7 @@ mod tests {
         let messages = vec![ChatMessage {
             role: "system".to_string(),
             content: "Short system prompt".to_string(),
+            reasoning: None,
         }];
 
         let (system_prompt, _) = AnthropicProvider::convert_messages(&messages);
@@ -1109,6 +1116,7 @@ mod tests {
         let messages = vec![ChatMessage {
             role: "system".to_string(),
             content: large_content.clone(),
+            reasoning: None,
         }];
 
         let (system_prompt, _) = AnthropicProvider::convert_messages(&messages);
@@ -1159,18 +1167,22 @@ mod tests {
             ChatMessage {
                 role: "system".to_string(),
                 content: "You are helpful.".to_string(),
+                reasoning: None,
             },
             ChatMessage {
                 role: "user".to_string(),
                 content: "gen a 2 sum in golang".to_string(),
+                reasoning: None,
             },
             ChatMessage {
                 role: "assistant".to_string(),
                 content: "```go\nfunc twoSum(nums []int) {}\n```".to_string(),
+                reasoning: None,
             },
             ChatMessage {
                 role: "user".to_string(),
                 content: "what's meaning of make here?".to_string(),
+                reasoning: None,
             },
         ];
 

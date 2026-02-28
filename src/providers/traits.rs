@@ -9,6 +9,11 @@ use std::fmt::Write;
 pub struct ChatMessage {
     pub role: String,
     pub content: String,
+    /// Reasoning/thinking content (e.g. from Kimi, Qwen, DeepSeek).
+    /// Preserved for history fidelity but usually not displayed to the user
+    /// unless explicitly requested.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning: Option<String>,
 }
 
 impl ChatMessage {
@@ -16,6 +21,7 @@ impl ChatMessage {
         Self {
             role: "system".into(),
             content: content.into(),
+            reasoning: None,
         }
     }
 
@@ -23,6 +29,7 @@ impl ChatMessage {
         Self {
             role: "user".into(),
             content: content.into(),
+            reasoning: None,
         }
     }
 
@@ -30,6 +37,15 @@ impl ChatMessage {
         Self {
             role: "assistant".into(),
             content: content.into(),
+            reasoning: None,
+        }
+    }
+
+    pub fn assistant_with_reasoning(content: impl Into<String>, reasoning: impl Into<String>) -> Self {
+        Self {
+            role: "assistant".into(),
+            content: content.into(),
+            reasoning: Some(reasoning.into()),
         }
     }
 
@@ -37,6 +53,7 @@ impl ChatMessage {
         Self {
             role: "tool".into(),
             content: content.into(),
+            reasoning: None,
         }
     }
 }
@@ -54,6 +71,8 @@ pub struct ToolCall {
 pub struct ChatResponse {
     /// Text content of the response (may be empty if only tool calls).
     pub text: Option<String>,
+    /// Reasoning/thinking content (e.g. from Kimi, Qwen, DeepSeek).
+    pub reasoning: Option<String>,
     /// Tool calls requested by the LLM.
     pub tool_calls: Vec<ToolCall>,
 }
@@ -93,6 +112,7 @@ pub enum ConversationMessage {
     /// Tool calls from the assistant (stored for history fidelity).
     AssistantToolCalls {
         text: Option<String>,
+        reasoning: Option<String>,
         tool_calls: Vec<ToolCall>,
     },
     /// Results of tool executions, fed back to the LLM.
@@ -343,6 +363,7 @@ pub trait Provider: Send + Sync {
                     .await?;
                 return Ok(ChatResponse {
                     text: Some(text),
+                    reasoning: None,
                     tool_calls: Vec::new(),
                 });
             }
@@ -353,6 +374,7 @@ pub trait Provider: Send + Sync {
             .await?;
         Ok(ChatResponse {
             text: Some(text),
+            reasoning: None,
             tool_calls: Vec::new(),
         })
     }
@@ -386,6 +408,7 @@ pub trait Provider: Send + Sync {
         let text = self.chat_with_history(messages, model, temperature).await?;
         Ok(ChatResponse {
             text: Some(text),
+            reasoning: None,
             tool_calls: Vec::new(),
         })
     }
@@ -509,6 +532,7 @@ mod tests {
     fn chat_response_helpers() {
         let empty = ChatResponse {
             text: None,
+            reasoning: None,
             tool_calls: vec![],
         };
         assert!(!empty.has_tool_calls());
@@ -516,6 +540,7 @@ mod tests {
 
         let with_tools = ChatResponse {
             text: Some("Let me check".into()),
+            reasoning: None,
             tool_calls: vec![ToolCall {
                 id: "1".into(),
                 name: "shell".into(),

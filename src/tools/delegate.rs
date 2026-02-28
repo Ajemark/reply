@@ -147,6 +147,7 @@ impl Tool for DelegateTool {
                 success: false,
                 output: String::new(),
                 error: Some("'agent' parameter must not be empty".into()),
+                screenshot_path: None,
             });
         }
 
@@ -161,6 +162,7 @@ impl Tool for DelegateTool {
                 success: false,
                 output: String::new(),
                 error: Some("'prompt' parameter must not be empty".into()),
+                screenshot_path: None,
             });
         }
 
@@ -178,7 +180,7 @@ impl Tool for DelegateTool {
                     self.agents.keys().map(|s: &String| s.as_str()).collect();
                 return Ok(ToolResult {
                     success: false,
-                    output: String::new(),
+                output: String::new(),
                     error: Some(format!(
                         "Unknown agent '{agent_name}'. Available agents: {}",
                         if available.is_empty() {
@@ -187,6 +189,7 @@ impl Tool for DelegateTool {
                             available.join(", ")
                         }
                     )),
+                    screenshot_path: None,
                 });
             }
         };
@@ -202,6 +205,7 @@ impl Tool for DelegateTool {
                     depth = self.depth,
                     max = agent_config.max_depth
                 )),
+                screenshot_path: None,
             });
         }
 
@@ -213,6 +217,7 @@ impl Tool for DelegateTool {
                 success: false,
                 output: String::new(),
                 error: Some(error),
+                screenshot_path: None,
             });
         }
 
@@ -233,11 +238,12 @@ impl Tool for DelegateTool {
             Err(e) => {
                 return Ok(ToolResult {
                     success: false,
-                    output: String::new(),
+                output: String::new(),
                     error: Some(format!(
                         "Failed to create provider '{}' for agent '{agent_name}': {e}",
                         agent_config.provider
                     )),
+                    screenshot_path: None,
                 });
             }
         };
@@ -268,10 +274,11 @@ impl Tool for DelegateTool {
             Err(_elapsed) => {
                 return Ok(ToolResult {
                     success: false,
-                    output: String::new(),
+                output: String::new(),
                     error: Some(format!(
                         "Agent '{agent_name}' timed out after {DELEGATE_TIMEOUT_SECS}s"
                     )),
+                    screenshot_path: None,
                 });
             }
         };
@@ -285,18 +292,20 @@ impl Tool for DelegateTool {
 
                 Ok(ToolResult {
                     success: true,
-                    output: format!(
+                output: format!(
                         "[Agent '{agent_name}' ({provider}/{model})]\n{rendered}",
                         provider = agent_config.provider,
                         model = agent_config.model
                     ),
                     error: None,
+                screenshot_path: None,
                 })
             }
             Err(e) => Ok(ToolResult {
                 success: false,
                 output: String::new(),
                 error: Some(format!("Agent '{agent_name}' failed: {e}",)),
+                screenshot_path: None,
             }),
         }
     }

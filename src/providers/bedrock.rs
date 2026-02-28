@@ -571,6 +571,7 @@ impl BedrockProvider {
             } else {
                 Some(text_parts.join("\n"))
             },
+            reasoning: None,
             tool_calls,
         }
     }
@@ -1080,7 +1081,7 @@ mod tests {
             messages.push(ChatMessage {
                 role: if i % 2 == 0 { "user" } else { "assistant" }.to_string(),
                 content: format!("Message {i}"),
-            });
+                reasoning: None,            });
         }
         assert!(BedrockProvider::should_cache_conversation(&messages));
     }

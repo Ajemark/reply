@@ -24,7 +24,7 @@ const STREAM_CHUNK_MIN_CHARS: usize = 80;
 
 /// Default maximum agentic tool-use iterations per user message to prevent runaway loops.
 /// Used as a safe fallback when `max_tool_iterations` is unset or configured as zero.
-const DEFAULT_MAX_TOOL_ITERATIONS: usize = 10;
+const DEFAULT_MAX_TOOL_ITERATIONS: usize = 30;
 
 /// Minimum user-message length (in chars) for auto-save to memory.
 /// Matches the channel-side constant in `channels/mod.rs`.
@@ -823,7 +823,7 @@ fn parse_structured_tool_calls(tool_calls: &[ToolCall]) -> Vec<ParsedToolCall> {
 /// Build assistant history entry in JSON format for native tool-call APIs.
 /// `convert_messages` in the OpenRouter provider parses this JSON to reconstruct
 /// the proper `NativeMessage` with structured `tool_calls`.
-fn build_native_assistant_history(text: &str, tool_calls: &[ToolCall]) -> String {
+fn build_native_assistant_history(text: &str, reasoning: Option<&str>, tool_calls: &[ToolCall]) -> String {
     let calls_json: Vec<serde_json::Value> = tool_calls
         .iter()
         .map(|tc| {
@@ -843,6 +843,7 @@ fn build_native_assistant_history(text: &str, tool_calls: &[ToolCall]) -> String
 
     serde_json::json!({
         "content": content,
+        "reasoning_content": reasoning,
         "tool_calls": calls_json,
     })
     .to_string()
@@ -986,6 +987,14 @@ pub(crate) async fn run_tool_call_loop(
             .into());
         }
 
+        if _iteration == max_iterations - 1 {
+            history.push(ChatMessage::system(
+                "CRITICAL: You have reached the tool iteration limit. Do NOT call any more tools. \
+                 Summarize your progress so far, what is completed, and what is pending. \
+                 Tell the user they can say 'continue' to proceed if they want you to keep working."
+            ));
+        }
+
         let prepared_messages =
             multimodal::prepare_messages_for_provider(history, multimodal_config).await?;
 
@@ -1023,7 +1032,7 @@ pub(crate) async fn run_tool_call_loop(
             chat_future.await
         };
 
-        let (response_text, parsed_text, tool_calls, assistant_history_content, native_tool_calls) =
+        let (response_text, response_reasoning, parsed_text, tool_calls, assistant_history_content, native_tool_calls) =
             match chat_result {
                 Ok(resp) => {
                     observer.record_event(&ObserverEvent::LlmResponse {
@@ -1035,6 +1044,7 @@ pub(crate) async fn run_tool_call_loop(
                     });
 
                     let response_text = resp.text_or_empty().to_string();
+                    let response_reasoning = resp.reasoning.clone();
                     // First try native structured tool calls (OpenAI-format).
                     // Fall back to text-based parsing (XML tags, markdown blocks,
                     // GLM format) only if the provider returned no native calls —
@@ -1055,12 +1065,13 @@ pub(crate) async fn run_tool_call_loop(
                     let assistant_history_content = if resp.tool_calls.is_empty() {
                         response_text.clone()
                     } else {
-                        build_native_assistant_history(&response_text, &resp.tool_calls)
+                        build_native_assistant_history(&response_text, response_reasoning.as_deref(), &resp.tool_calls)
                     };
 
                     let native_calls = resp.tool_calls;
                     (
                         response_text,
+                        response_reasoning,
                         parsed_text,
                         calls,
                         assistant_history_content,
@@ -1111,7 +1122,11 @@ pub(crate) async fn run_tool_call_loop(
                     let _ = tx.send(chunk).await;
                 }
             }
-            history.push(ChatMessage::assistant(response_text.clone()));
+            history.push(ChatMessage {
+                role: "assistant".to_string(),
+                content: response_text.clone(),
+                reasoning: response_reasoning,
+            });
             return Ok(display_text);
         }
 
@@ -1180,7 +1195,11 @@ pub(crate) async fn run_tool_call_loop(
                             success: r.success,
                         });
                         if r.success {
-                            scrub_credentials(&r.output)
+                            let mut out = scrub_credentials(&r.output);
+                            if let Some(ref path) = r.screenshot_path {
+                                out.push_str(&format!("\n[IMAGE:{}]", path));
+                            }
+                            out
                         } else {
                             format!("Error: {}", r.error.unwrap_or_else(|| r.output))
                         }
@@ -1210,7 +1229,11 @@ pub(crate) async fn run_tool_call_loop(
         // Native mode: use JSON-structured messages so convert_messages() can
         // reconstruct proper OpenAI-format tool_calls and tool result messages.
         // Prompt mode: use XML-based text format as before.
-        history.push(ChatMessage::assistant(assistant_history_content));
+        history.push(ChatMessage {
+            role: "assistant".to_string(),
+            content: assistant_history_content,
+            reasoning: response_reasoning,
+        });
         if native_tool_calls.is_empty() {
             history.push(ChatMessage::user(format!("[Tool results]\n{tool_results}")));
         } else {
@@ -1222,6 +1245,12 @@ pub(crate) async fn run_tool_call_loop(
                 history.push(ChatMessage::tool(tool_msg.to_string()));
             }
         }
+    }
+
+    // If we finished the loop without a final answer, return the last assistant response
+    // (which should be the summary if the iteration limit was reached).
+    if let Some(msg) = history.iter().rev().find(|m| m.role == "assistant") {
+        return Ok(msg.content.clone());
     }
 
     anyhow::bail!("Agent exceeded maximum tool iterations ({max_iterations})")
@@ -2002,6 +2031,7 @@ mod tests {
 
             Ok(ChatResponse {
                 text: Some("vision-ok".to_string()),
+                reasoning: None,
                 tool_calls: Vec::new(),
             })
         }

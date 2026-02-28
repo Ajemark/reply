@@ -71,6 +71,7 @@ impl Tool for ShellTool {
                 success: false,
                 output: String::new(),
                 error: Some("Rate limit exceeded: too many actions in the last hour".into()),
+                screenshot_path: None,
             });
         }
 
@@ -79,8 +80,9 @@ impl Tool for ShellTool {
             Err(reason) => {
                 return Ok(ToolResult {
                     success: false,
-                    output: String::new(),
+                output: String::new(),
                     error: Some(reason),
+                screenshot_path: None,
                 });
             }
         }
@@ -90,6 +92,7 @@ impl Tool for ShellTool {
                 success: false,
                 output: String::new(),
                 error: Some("Rate limit exceeded: action budget exhausted".into()),
+                screenshot_path: None,
             });
         }
 
@@ -104,8 +107,9 @@ impl Tool for ShellTool {
             Err(e) => {
                 return Ok(ToolResult {
                     success: false,
-                    output: String::new(),
+                output: String::new(),
                     error: Some(format!("Failed to build runtime command: {e}")),
+                screenshot_path: None,
                 });
             }
         };
@@ -137,18 +141,20 @@ impl Tool for ShellTool {
 
                 Ok(ToolResult {
                     success: output.status.success(),
-                    output: stdout,
+                output: stdout,
                     error: if stderr.is_empty() {
                         None
                     } else {
                         Some(stderr)
                     },
+                    screenshot_path: None,
                 })
             }
             Ok(Err(e)) => Ok(ToolResult {
                 success: false,
                 output: String::new(),
                 error: Some(format!("Failed to execute command: {e}")),
+                screenshot_path: None,
             }),
             Err(_) => Ok(ToolResult {
                 success: false,
@@ -156,6 +162,7 @@ impl Tool for ShellTool {
                 error: Some(format!(
                     "Command timed out after {SHELL_TIMEOUT_SECS}s and was killed"
                 )),
+                screenshot_path: None,
             }),
         }
     }

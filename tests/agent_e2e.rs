@@ -63,7 +63,7 @@ impl Provider for MockProvider {
         if guard.is_empty() {
             return Ok(ChatResponse {
                 text: Some("done".into()),
-                tool_calls: vec![],
+                reasoning: None,                tool_calls: vec![],
             });
         }
         Ok(guard.remove(0))
@@ -99,6 +99,7 @@ impl Tool for EchoTool {
             success: true,
             output: msg,
             error: None,
+            screenshot_path: None,
         })
     }
 }
@@ -138,6 +139,7 @@ impl Tool for CountingTool {
             success: true,
             output: format!("call #{}", *c),
             error: None,
+            screenshot_path: None,
         })
     }
 }
@@ -187,7 +189,7 @@ impl Provider for RecordingProvider {
         if guard.is_empty() {
             return Ok(ChatResponse {
                 text: Some("done".into()),
-                tool_calls: vec![],
+                reasoning: None,                tool_calls: vec![],
             });
         }
         Ok(guard.remove(0))
@@ -234,6 +236,7 @@ fn make_observer() -> Arc<dyn Observer> {
 fn text_response(text: &str) -> ChatResponse {
     ChatResponse {
         text: Some(text.into()),
+        reasoning: None,
         tool_calls: vec![],
     }
 }
@@ -241,6 +244,7 @@ fn text_response(text: &str) -> ChatResponse {
 fn tool_response(calls: Vec<ToolCall>) -> ChatResponse {
     ChatResponse {
         text: Some(String::new()),
+        reasoning: None,
         tool_calls: calls,
     }
 }
@@ -364,6 +368,7 @@ async fn e2e_xml_dispatcher_tool_call() {
 </tool_call>"#
                     .into(),
             ),
+            reasoning: None,
             tool_calls: vec![],
         },
         text_response("XML tool executed"),

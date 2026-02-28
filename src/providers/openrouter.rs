@@ -22,6 +22,8 @@ struct ChatRequest {
 struct Message {
     role: String,
     content: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning_content: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -37,6 +39,8 @@ struct Choice {
 #[derive(Debug, Deserialize)]
 struct ResponseMessage {
     content: String,
+    #[serde(default)]
+    pub reasoning_content: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -55,6 +59,8 @@ struct NativeMessage {
     role: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     content: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning_content: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tool_call_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -162,9 +168,15 @@ impl OpenRouterProvider {
                                     .get("content")
                                     .and_then(serde_json::Value::as_str)
                                     .map(ToString::to_string);
+                                let reasoning_content = value
+                                    .get("reasoning_content")
+                                    .and_then(serde_json::Value::as_str)
+                                    .map(ToString::to_string)
+                                    .or(m.reasoning.clone());
                                 return NativeMessage {
                                     role: "assistant".to_string(),
                                     content,
+                                    reasoning_content,
                                     tool_call_id: None,
                                     tool_calls: Some(tool_calls),
                                 };
@@ -186,6 +198,7 @@ impl OpenRouterProvider {
                         return NativeMessage {
                             role: "tool".to_string(),
                             content,
+                            reasoning_content: None,
                             tool_call_id,
                             tool_calls: None,
                         };
@@ -195,6 +208,7 @@ impl OpenRouterProvider {
                 NativeMessage {
                     role: m.role.clone(),
                     content: Some(m.content.clone()),
+                    reasoning_content: m.reasoning.clone(),
                     tool_call_id: None,
                     tool_calls: None,
                 }
@@ -216,6 +230,7 @@ impl OpenRouterProvider {
 
         ProviderChatResponse {
             text: message.content,
+            reasoning: None,
             tool_calls,
         }
     }
@@ -257,12 +272,14 @@ impl Provider for OpenRouterProvider {
             messages.push(Message {
                 role: "system".to_string(),
                 content: sys.to_string(),
+                reasoning_content: None,
             });
         }
 
         messages.push(Message {
             role: "user".to_string(),
             content: message.to_string(),
+            reasoning_content: None,
         });
 
         let request = ChatRequest {
@@ -312,6 +329,7 @@ impl Provider for OpenRouterProvider {
             .map(|m| Message {
                 role: m.role.clone(),
                 content: m.content.clone(),
+                reasoning_content: m.reasoning.clone(),
             })
             .collect();
 
@@ -530,10 +548,12 @@ mod tests {
             ChatMessage {
                 role: "system".into(),
                 content: "be concise".into(),
+                reasoning: None,
             },
             ChatMessage {
                 role: "user".into(),
                 content: "hello".into(),
+                reasoning: None,
             },
         ];
 
@@ -553,10 +573,12 @@ mod tests {
                 Message {
                     role: "system".into(),
                     content: "You are helpful".into(),
+                    reasoning_content: None,
                 },
                 Message {
                     role: "user".into(),
                     content: "Summarize this".into(),
+                    reasoning_content: None,
                 },
             ],
             temperature: 0.5,
@@ -576,10 +598,12 @@ mod tests {
             ChatMessage {
                 role: "assistant".into(),
                 content: "Previous answer".into(),
+                reasoning: None,
             },
             ChatMessage {
                 role: "user".into(),
                 content: "Follow-up".into(),
+                reasoning: None,
             },
         ];
 
@@ -590,6 +614,7 @@ mod tests {
                 .map(|msg| Message {
                     role: msg.role.clone(),
                     content: msg.content.clone(),
+                    reasoning_content: None,
                 })
                 .collect(),
             temperature: 0.0,
@@ -626,6 +651,7 @@ mod tests {
         let messages = vec![ChatMessage {
             role: "user".into(),
             content: "What is the date?".into(),
+            reasoning: None,
         }];
         let tools = vec![serde_json::json!({
             "type": "function",
@@ -720,6 +746,7 @@ mod tests {
             role: "assistant".into(),
             content: r#"{"content":"Using tool","tool_calls":[{"id":"call_abc","name":"shell","arguments":"{\"command\":\"pwd\"}"}]}"#
                 .into(),
+            reasoning: None,
         }];
 
         let converted = OpenRouterProvider::convert_messages(&messages);
@@ -739,6 +766,7 @@ mod tests {
         let messages = vec![ChatMessage {
             role: "tool".into(),
             content: r#"{"tool_call_id":"call_xyz","content":"done"}"#.into(),
+            reasoning: None,
         }];
 
         let converted = OpenRouterProvider::convert_messages(&messages);

@@ -91,6 +91,8 @@ impl SerialTransport {
         let error = resp["error"].as_str().map(String::from);
 
         Ok(ToolResult {
+                screenshot_path: None,
+                
             success: ok,
             output: result,
             error,

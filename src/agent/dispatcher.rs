@@ -133,8 +133,12 @@ impl ToolDispatcher for XmlToolDispatcher {
             .iter()
             .flat_map(|msg| match msg {
                 ConversationMessage::Chat(chat) => vec![chat.clone()],
-                ConversationMessage::AssistantToolCalls { text, .. } => {
-                    vec![ChatMessage::assistant(text.clone().unwrap_or_default())]
+                ConversationMessage::AssistantToolCalls { text, reasoning, .. } => {
+                    let mut content = text.clone().unwrap_or_default();
+                    if let Some(r) = reasoning {
+                        content = format!("Thinking: {}\n\n{}", r, content);
+                    }
+                    vec![ChatMessage::assistant(content)]
                 }
                 ConversationMessage::ToolResults(results) => {
                     let mut content = String::new();
@@ -203,9 +207,10 @@ impl ToolDispatcher for NativeToolDispatcher {
             .iter()
             .flat_map(|msg| match msg {
                 ConversationMessage::Chat(chat) => vec![chat.clone()],
-                ConversationMessage::AssistantToolCalls { text, tool_calls } => {
+                ConversationMessage::AssistantToolCalls { text, reasoning, tool_calls } => {
                     let payload = serde_json::json!({
                         "content": text,
+                        "reasoning_content": reasoning,
                         "tool_calls": tool_calls,
                     });
                     vec![ChatMessage::assistant(payload.to_string())]
@@ -242,6 +247,7 @@ mod tests {
                 "Checking\n<tool_call>{\"name\":\"shell\",\"arguments\":{\"command\":\"ls\"}}</tool_call>"
                     .into(),
             ),
+            reasoning: None,
             tool_calls: vec![],
         };
         let dispatcher = XmlToolDispatcher;
@@ -254,6 +260,7 @@ mod tests {
     fn native_dispatcher_roundtrip() {
         let response = ChatResponse {
             text: Some("ok".into()),
+            reasoning: None,
             tool_calls: vec![crate::providers::ToolCall {
                 id: "tc1".into(),
                 name: "file_read".into(),

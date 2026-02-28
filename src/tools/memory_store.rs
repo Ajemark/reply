@@ -75,6 +75,7 @@ impl Tool for MemoryStoreTool {
                 success: false,
                 output: String::new(),
                 error: Some(error),
+                screenshot_path: None,
             });
         }
 
@@ -83,11 +84,13 @@ impl Tool for MemoryStoreTool {
                 success: true,
                 output: format!("Stored memory: {key}"),
                 error: None,
+                screenshot_path: None,
             }),
             Err(e) => Ok(ToolResult {
                 success: false,
                 output: String::new(),
                 error: Some(format!("Failed to store memory: {e}")),
+                screenshot_path: None,
             }),
         }
     }

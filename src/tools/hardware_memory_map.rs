@@ -89,6 +89,7 @@ impl Tool for HardwareMemoryMapTool {
                     "No peripherals configured. Add boards to config.toml [peripherals.boards]."
                         .into(),
                 ),
+                screenshot_path: None,
             });
         }
 
@@ -137,8 +138,9 @@ impl Tool for HardwareMemoryMapTool {
 
         Ok(ToolResult {
             success: true,
-            output,
+                screenshot_path: None,            output,
             error: None,
+                
         })
     }
 }

@@ -91,6 +91,8 @@ impl Tool for HardwareCapabilitiesTool {
         };
 
         Ok(ToolResult {
+                screenshot_path: None,
+                
             success: !outputs.is_empty(),
             output,
             error: None,

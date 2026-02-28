@@ -17,6 +17,9 @@ services:
     container_name: zeroclaw
     restart: unless-stopped
 
+    env_file:
+      - .env
+
     environment:
       # Required: Your LLM provider API key
       - API_KEY=${API_KEY:-}

@@ -121,6 +121,7 @@ impl Tool for ScheduleTool {
                 error: Some(format!(
                     "Unknown action '{other}'. Use create/add/once/list/get/cancel/remove/pause/resume."
                 )),
+                screenshot_path: None,
             }),
         }
     }
@@ -135,6 +136,7 @@ impl ScheduleTool {
                 error: Some(format!(
                     "Security policy: read-only mode, cannot perform '{action}'"
                 )),
+                screenshot_path: None,
             });
         }
 
@@ -143,6 +145,7 @@ impl ScheduleTool {
                 success: false,
                 output: String::new(),
                 error: Some("Rate limit exceeded: action budget exhausted".to_string()),
+                screenshot_path: None,
             });
         }
 
@@ -156,6 +159,7 @@ impl ScheduleTool {
                 success: true,
                 output: "No scheduled jobs.".to_string(),
                 error: None,
+                screenshot_path: None,
             });
         }
 
@@ -187,8 +191,9 @@ impl ScheduleTool {
 
         Ok(ToolResult {
             success: true,
-            output: format!("Scheduled jobs ({}):\n{}", lines.len(), lines.join("\n")),
+                output: format!("Scheduled jobs ({}):\n{}", lines.len(), lines.join("\n")),
             error: None,
+                screenshot_path: None,
         })
     }
 
@@ -207,14 +212,16 @@ impl ScheduleTool {
                 });
                 Ok(ToolResult {
                     success: true,
-                    output: serde_json::to_string_pretty(&detail)?,
+                output: serde_json::to_string_pretty(&detail)?,
                     error: None,
+                screenshot_path: None,
                 })
             }
             Err(_) => Ok(ToolResult {
                 success: false,
                 output: String::new(),
                 error: Some(format!("Job '{id}' not found")),
+                screenshot_path: None,
             }),
         }
     }
@@ -235,8 +242,9 @@ impl ScheduleTool {
                 if expression.is_none() || delay.is_some() || run_at.is_some() {
                     return Ok(ToolResult {
                         success: false,
-                        output: String::new(),
+                output: String::new(),
                         error: Some("'add' requires 'expression' and forbids delay/run_at".into()),
+                screenshot_path: None,
                     });
                 }
             }
@@ -244,15 +252,17 @@ impl ScheduleTool {
                 if expression.is_some() || (delay.is_none() && run_at.is_none()) {
                     return Ok(ToolResult {
                         success: false,
-                        output: String::new(),
+                output: String::new(),
                         error: Some("'once' requires exactly one of 'delay' or 'run_at'".into()),
+                screenshot_path: None,
                     });
                 }
                 if delay.is_some() && run_at.is_some() {
                     return Ok(ToolResult {
                         success: false,
-                        output: String::new(),
+                output: String::new(),
                         error: Some("'once' supports either delay or run_at, not both".into()),
+                screenshot_path: None,
                     });
                 }
             }
@@ -264,11 +274,12 @@ impl ScheduleTool {
                 if count != 1 {
                     return Ok(ToolResult {
                         success: false,
-                        output: String::new(),
+                output: String::new(),
                         error: Some(
                             "Exactly one of 'expression', 'delay', or 'run_at' must be provided"
                                 .into(),
                         ),
+                        screenshot_path: None,
                     });
                 }
             }
@@ -286,6 +297,7 @@ impl ScheduleTool {
                     job.command
                 ),
                 error: None,
+                screenshot_path: None,
             });
         }
 
@@ -300,6 +312,7 @@ impl ScheduleTool {
                     job.command
                 ),
                 error: None,
+                screenshot_path: None,
             });
         }
 
@@ -311,13 +324,14 @@ impl ScheduleTool {
         let job = cron::add_once_at(&self.config, run_at_parsed, command)?;
         Ok(ToolResult {
             success: true,
-            output: format!(
+                output: format!(
                 "Created one-shot job {} (runs at: {}, cmd: {})",
                 job.id,
                 job.next_run.to_rfc3339(),
                 job.command
             ),
             error: None,
+                screenshot_path: None,
         })
     }
 
@@ -327,11 +341,13 @@ impl ScheduleTool {
                 success: true,
                 output: format!("Cancelled job {id}"),
                 error: None,
+                screenshot_path: None,
             },
             Err(error) => ToolResult {
                 success: false,
                 output: String::new(),
                 error: Some(error.to_string()),
+                screenshot_path: None,
             },
         }
     }
@@ -352,11 +368,13 @@ impl ScheduleTool {
                     format!("Resumed job {id}")
                 },
                 error: None,
+                screenshot_path: None,
             },
             Err(error) => ToolResult {
                 success: false,
                 output: String::new(),
                 error: Some(error.to_string()),
+                screenshot_path: None,
             },
         }
     }

@@ -362,6 +362,7 @@ impl CopilotProvider {
 
         Ok(ProviderChatResponse {
             text: choice.message.content,
+            reasoning: None,
             tool_calls,
         })
     }

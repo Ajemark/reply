@@ -227,8 +227,9 @@ impl Tool for WebSearchTool {
 
         Ok(ToolResult {
             success: true,
-            output: result,
+                output: result,
             error: None,
+                screenshot_path: None,
         })
     }
 }

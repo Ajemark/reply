@@ -44,6 +44,7 @@ impl Tool for CronUpdateTool {
                 success: false,
                 output: String::new(),
                 error: Some("cron is disabled by config (cron.enabled=false)".to_string()),
+                screenshot_path: None,
             });
         }
 
@@ -52,8 +53,9 @@ impl Tool for CronUpdateTool {
             _ => {
                 return Ok(ToolResult {
                     success: false,
-                    output: String::new(),
+                output: String::new(),
                     error: Some("Missing 'job_id' parameter".to_string()),
+                screenshot_path: None,
                 });
             }
         };
@@ -63,8 +65,9 @@ impl Tool for CronUpdateTool {
             None => {
                 return Ok(ToolResult {
                     success: false,
-                    output: String::new(),
+                output: String::new(),
                     error: Some("Missing 'patch' parameter".to_string()),
+                screenshot_path: None,
                 });
             }
         };
@@ -74,8 +77,9 @@ impl Tool for CronUpdateTool {
             Err(e) => {
                 return Ok(ToolResult {
                     success: false,
-                    output: String::new(),
+                output: String::new(),
                     error: Some(format!("Invalid patch payload: {e}")),
+                screenshot_path: None,
                 });
             }
         };
@@ -84,8 +88,9 @@ impl Tool for CronUpdateTool {
             if !self.security.is_command_allowed(command) {
                 return Ok(ToolResult {
                     success: false,
-                    output: String::new(),
+                output: String::new(),
                     error: Some(format!("Command blocked by security policy: {command}")),
+                screenshot_path: None,
                 });
             }
         }
@@ -95,11 +100,13 @@ impl Tool for CronUpdateTool {
                 success: true,
                 output: serde_json::to_string_pretty(&job)?,
                 error: None,
+                screenshot_path: None,
             }),
             Err(e) => Ok(ToolResult {
                 success: false,
                 output: String::new(),
                 error: Some(e.to_string()),
+                screenshot_path: None,
             }),
         }
     }

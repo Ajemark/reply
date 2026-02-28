@@ -1,0 +1,8 @@
+@@ -1249,6 +1249,7 @@
+         let tools = Self::convert_tool_specs(request.tools);
+         let effective_messages = if self.merge_system_into_user {
+             Self::flatten_system_messages(request.messages)
+         } else {
+             request.messages.to_vec()
+         };
++        tracing::info!("native chat: sending {} tools to provider {}", tools.as_ref().map(|t| t.len()).unwrap_or(0), self.name);

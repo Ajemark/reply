@@ -68,6 +68,7 @@ impl Tool for HardwareMemoryReadTool {
                     "No peripherals configured. Add nucleo-f401re to config.toml [peripherals.boards]."
                         .into(),
                 ),
+                screenshot_path: None,
             });
         }
 
@@ -87,6 +88,7 @@ impl Tool for HardwareMemoryReadTool {
                     "Memory read only supports nucleo-f401re, nucleo-f411re. Got: {}",
                     board
                 )),
+                screenshot_path: None,
             });
         }
 
@@ -107,18 +109,20 @@ impl Tool for HardwareMemoryReadTool {
                 Ok(output) => {
                     return Ok(ToolResult {
                         success: true,
-                        output,
+                screenshot_path: None,                        output,
                         error: None,
+                screenshot_path: None,
                     });
                 }
                 Err(e) => {
                     return Ok(ToolResult {
                         success: false,
-                        output: String::new(),
+                output: String::new(),
                         error: Some(format!(
                             "probe-rs read failed: {}. Ensure Nucleo is connected via USB and built with --features probe.",
                             e
                         )),
+                        screenshot_path: None,
                     });
                 }
             }
@@ -133,6 +137,7 @@ impl Tool for HardwareMemoryReadTool {
                     "Memory read requires probe feature. Build with: cargo build --features hardware,probe"
                         .into(),
                 ),
+                screenshot_path: None,
             })
         }
     }
