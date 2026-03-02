@@ -3534,6 +3534,22 @@ impl Config {
                 }
             }
         }
+
+        // Autonomy Max Actions Per Hour: ZEROCLAW_AUTONOMY_MAX_ACTIONS_PER_HOUR
+        if let Ok(val) = std::env::var("ZEROCLAW_AUTONOMY_MAX_ACTIONS_PER_HOUR") {
+            if let Ok(actions) = val.parse::<u32>() {
+                if actions > 0 {
+                    self.autonomy.max_actions_per_hour = actions;
+                }
+            }
+        }
+
+        // Autonomy Max Cost Per Day Cents: ZEROCLAW_AUTONOMY_MAX_COST_PER_DAY_CENTS
+        if let Ok(val) = std::env::var("ZEROCLAW_AUTONOMY_MAX_COST_PER_DAY_CENTS") {
+            if let Ok(cost) = val.parse::<u32>() {
+                self.autonomy.max_cost_per_day_cents = cost;
+            }
+        }
         // Proxy enabled flag: ZEROCLAW_PROXY_ENABLED
         let explicit_proxy_enabled = std::env::var("ZEROCLAW_PROXY_ENABLED")
             .ok()
