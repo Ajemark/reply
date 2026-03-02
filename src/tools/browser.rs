@@ -1471,13 +1471,15 @@ mod native_backend {
                 }
                 BrowserAction::Scrape { url } => {
                     let client = self.active_client()?;
-                    self.validate_url(&url)?;
                     client.goto(&url).await?;
                     tokio::time::sleep(Duration::from_millis(2000)).await;
 
                     let title = client.title().await.ok();
                     let current_url = client.current_url().await.map(|u| u.to_string()).ok();
-                    let snapshot = self.take_accessibility_snapshot(client, false, true, None).await.ok();
+                    let snapshot = client
+                        .execute(&snapshot_script(true, true, None), vec![])
+                        .await
+                        .ok();
 
                     json!({
                         "backend": "rust_native",
@@ -1525,6 +1527,7 @@ mod native_backend {
             }
 
             tracing::info!(url = webdriver_url, headless, "Initializing new browser session");
+            let mut capabilities: Map<String, Value> = Map::new();
             let mut chrome_options: Map<String, Value> = Map::new();
             let mut args: Vec<Value> = Vec::new();
 
@@ -1557,15 +1560,15 @@ mod native_backend {
                 builder.capabilities(capabilities);
             }
 
-            let client = builder
-                .connect(webdriver_url)
-                .await
-                .with_context(|| {
-                    tracing::error!(url = webdriver_url, "Failed to connect to WebDriver");
-                    format!(
-                        "Failed to connect to WebDriver at {webdriver_url}. Start chromedriver/geckodriver first"
-                    )
-                })?;
+            let client = match builder.connect(webdriver_url).await {
+                Ok(c) => c,
+                Err(e) => {
+                    tracing::error!(url = webdriver_url, error = %e, "Failed to connect to WebDriver");
+                    anyhow::bail!(
+                        "Failed to connect to WebDriver at {webdriver_url}. Detailed error: {e:#}"
+                    );
+                }
+            };
 
             tracing::info!("Browser session established");
             self.client = Some(client);
